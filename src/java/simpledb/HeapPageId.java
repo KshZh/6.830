@@ -1,7 +1,11 @@
 package simpledb;
 
+import org.hamcrest.core.IsInstanceOf;
+
 /** Unique identifier for HeapPage objects. */
 public class HeapPageId implements PageId {
+	int tableId;
+	int pgNo;
 
     /**
      * Constructor. Create a page id structure for a specific page of a
@@ -12,12 +16,14 @@ public class HeapPageId implements PageId {
      */
     public HeapPageId(int tableId, int pgNo) {
         // some code goes here
+    	this.tableId = tableId;
+    	this.pgNo = pgNo;
     }
 
     /** @return the table associated with this PageId */
     public int getTableId() {
         // some code goes here
-        return 0;
+        return tableId;
     }
 
     /**
@@ -26,7 +32,7 @@ public class HeapPageId implements PageId {
      */
     public int getPageNumber() {
         // some code goes here
-        return 0;
+        return pgNo;
     }
 
     /**
@@ -37,7 +43,8 @@ public class HeapPageId implements PageId {
      */
     public int hashCode() {
         // some code goes here
-        throw new UnsupportedOperationException("implement this");
+        // throw new UnsupportedOperationException("implement this");
+    	return pgNo; // pgNo是唯一的，直接作为哈希值即可。
     }
 
     /**
@@ -49,7 +56,10 @@ public class HeapPageId implements PageId {
      */
     public boolean equals(Object o) {
         // some code goes here
-        return false;
+    	if (o == null || !(o instanceof PageId))
+    		return false;
+        PageId pageId = (PageId)o;
+		return pageId.getTableId()==tableId && pageId.getPageNumber()==pgNo;
     }
 
     /**

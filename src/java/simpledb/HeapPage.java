@@ -53,7 +53,7 @@ public class HeapPage implements Page {
         try{
             // allocate and read the actual records of this page
             for (int i=0; i<tuples.length; i++)
-                tuples[i] = readNextTuple(dis,i);
+                tuples[i] = readNextTuple(dis,i); // tuples[i]可能指向null，如果slotId为i的Tuple在该Page中不存在的话。
         }catch(NoSuchElementException e){
             e.printStackTrace();
         }
@@ -65,10 +65,9 @@ public class HeapPage implements Page {
     /** Retrieve the number of tuples on this page.
         @return the number of tuples on this page
     */
-    private int getNumTuples() {        
+    private int getNumTuples() {
         // some code goes here
-        return 0;
-
+    	return (int) Math.floor(BufferPool.getPageSize()*8/(td.getSize()*8+1));
     }
 
     /**
@@ -76,12 +75,10 @@ public class HeapPage implements Page {
      * @return the number of bytes in the header of a page in a HeapFile with each tuple occupying tupleSize bytes
      */
     private int getHeaderSize() {        
-        
         // some code goes here
-        return 0;
-                 
+        return (int) Math.ceil(numSlots/8.0); // XXX 注意这里要做浮点数除法，而不是整数除法，如果写成了整数除法，那么除非刚好整除，否则就会数组下标访问越界。
     }
-    
+
     /** Return a view of this page before it was modified
         -- used by recovery */
     public HeapPage getBeforeImage(){
@@ -111,8 +108,8 @@ public class HeapPage implements Page {
      * @return the PageId associated with this page.
      */
     public HeapPageId getId() {
-    // some code goes here
-    throw new UnsupportedOperationException("implement this");
+	    // some code goes here
+	    return pid;
     }
 
     /**
@@ -124,7 +121,7 @@ public class HeapPage implements Page {
         if (!isSlotUsed(slotId)) {
             for (int i=0; i<td.getSize(); i++) {
                 try {
-                    dis.readByte();
+                    dis.readByte(); // 推进文件读写指针。
                 } catch (IOException e) {
                     throw new NoSuchElementException("error reading empty tuple");
                 }
@@ -137,7 +134,7 @@ public class HeapPage implements Page {
         RecordId rid = new RecordId(pid, slotId);
         t.setRecordId(rid);
         try {
-            for (int j=0; j<td.numFields(); j++) {
+            for (int j=0; j<td.numFields(); j++) { // 逐个字段读取并解析。
                 Field f = td.getFieldType(j).parse(dis);
                 t.setField(j, f);
             }
@@ -195,7 +192,7 @@ public class HeapPage implements Page {
             for (int j=0; j<td.numFields(); j++) {
                 Field f = tuples[i].getField(j);
                 try {
-                    f.serialize(dos);
+                    f.serialize(dos); // XXX 分派，让特定类型的Field根据自己的类型把自己的数据序列化到dos中，这降低了caller的复杂度。
                 
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -205,7 +202,7 @@ public class HeapPage implements Page {
 
         // padding
         int zerolen = BufferPool.getPageSize() - (header.length + td.getSize() * tuples.length); //- numSlots * td.getSize();
-        byte[] zeroes = new byte[zerolen];
+        byte[] zeroes = new byte[zerolen]; // 默认初始化为零值？
         try {
             dos.write(zeroes, 0, zerolen);
         } catch (IOException e) {
@@ -213,7 +210,7 @@ public class HeapPage implements Page {
         }
 
         try {
-            dos.flush();
+            dos.flush(); // 全部写到baos中。
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -265,7 +262,7 @@ public class HeapPage implements Page {
      */
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
-	// not necessary for lab1
+    	// not necessary for lab1
     }
 
     /**
@@ -273,7 +270,7 @@ public class HeapPage implements Page {
      */
     public TransactionId isDirty() {
         // some code goes here
-	// Not necessary for lab1
+    	// Not necessary for lab1
         return null;      
     }
 
@@ -282,7 +279,14 @@ public class HeapPage implements Page {
      */
     public int getNumEmptySlots() {
         // some code goes here
-        return 0;
+    	// 检查bitmap即可。
+    	int n = 0, i;
+    	for (i = 0; i < numSlots; i++) {
+			if ((header[i/8]&(1<<(i%8))) == 0) {
+				n++;
+			}
+		}
+        return n;
     }
 
     /**
@@ -290,7 +294,7 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
         // some code goes here
-        return false;
+        return (header[i/8]&(1<<(i%8)))!=0;
     }
 
     /**
@@ -307,7 +311,23 @@ public class HeapPage implements Page {
      */
     public Iterator<Tuple> iterator() {
         // some code goes here
-        return null;
+        return new Iterator<Tuple>() {
+        	int i = 0;
+        	
+			@Override
+			public Tuple next() {
+				Tuple tuple = tuples[i];
+				i++;
+				return tuple;
+			}
+			
+			@Override
+			public boolean hasNext() {
+				while (i<numSlots && !isSlotUsed(i)) // 注意要判断一下i，避免越界。
+					i++;
+				return i<numSlots;
+			}
+		};
     }
 
 }
