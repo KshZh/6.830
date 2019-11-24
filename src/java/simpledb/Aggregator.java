@@ -9,6 +9,8 @@ import java.io.Serializable;
 public interface Aggregator extends Serializable {
     static final int NO_GROUPING = -1;
 
+    static final Field _DUMMY_FIELD = new StringField("", 0);
+    
     /**
      * SUM_COUNT and SC_AVG will
      * only be used in lab7, you are not required

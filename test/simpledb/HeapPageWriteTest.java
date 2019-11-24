@@ -89,7 +89,7 @@ public class HeapPageWriteTest extends SimpleDbTestBase {
      * Unit test for HeapPage.deleteTuple() with false tuples
      */
     @Test(expected=DbException.class)
-        public void deleteNonexistentTuple() throws Exception {
+    public void deleteNonexistentTuple() throws Exception {
         HeapPage page = new HeapPage(pid, HeapPageReadTest.EXAMPLE_DATA);
         page.deleteTuple(Utility.getHeapTuple(2, 2));
     }

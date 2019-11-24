@@ -249,3 +249,88 @@ public abstract class Operator implements OpIterator {
 
 ### 2.2. Aggregates
 
+注意StringAggregator和IntegerAggregator中的类型前缀，指的是要进行聚合的字段的类型，是StringField还是IntField，而group的字段的类型在两个类中都可以是StringField或IntField。
+
+**Exercise 2.**
+
+- src/simpledb/IntegerAggregator.java
+
+  ```java
+  // 错误的做法！这样代码很复杂，有很多分支判断。
+  // private HashMap<Integer, Integer> resultOfGroupsOfInteger;
+  // private HashMap<String, Integer> resultOfGroupsOfString;
+  // private HashMap<String, Integer> numTuplePerGroupOfString;
+  // private HashMap<Integer, Integer> numTuplePerGroupOfInteger;
+  // 要让我们的代码更泛用，就要提高类型的抽象层级。
+  private HashMap<Field, Integer> resultOfGroups;
+  private HashMap<Field, Integer> numTuplePerGroup;
+  private int resultOfNoGrouping;
+  private int n;
+  
+  // 更进一步，可以制作一个DUMMY_FIELD，然后数据成员可以进一步精简为：
+  private HashMap<Field, Integer> resultOfGroups;
+  private HashMap<Field, Integer> numTuplePerGroup;
+  // 而且代码又少了一些分支，更简洁。
+  
+  // 定义在接口Aggregator中，注意确保_DUMMY_FIELD的值不会被用户用到。
+  static final Field _DUMMY_FIELD = new StringField("", 0);
+  ```
+
+- src/simpledb/StringAggregator.java
+
+- src/simpledb/Aggregate.java
+
+  ```java
+  public class Aggregate extends Operator {
+  	private OpIterator childIterator;
+  	private Aggregator aggregator;
+  	private int gbField;
+  	private int aField;
+  	private TupleDesc tDesc;
+  	private Op op;
+      
+      public Aggregate(OpIterator child, int afield, int gfield, Aggregator.Op aop) {
+      	// some code goes here
+      	this.childIterator = child;
+      	this.gbField = gfield;
+      	this.aField = afield;
+      	this.op = aop;
+      	Type gType = null;
+      	TupleDesc tDesc = child.getTupleDesc();
+      	Type aType = tDesc.getFieldType(afield);
+      	if (gfield != -1) {
+          	gType = tDesc.getFieldType(gfield);
+          	this.tDesc = new TupleDesc(new Type[]{gType, aType}, new String[]{tDesc.getFieldName(gfield), tDesc.getFieldName(afield)});
+      	} else {
+      		this.tDesc = new TupleDesc(new Type[]{aType}, new String[]{tDesc.getFieldName(afield)});
+      	}
+      	if (aType == Type.STRING_TYPE) {
+      		aggregator = new StringAggregator(gfield, gType, afield, aop);
+      	} else {
+      		aggregator = new IntegerAggregator(gfield, gType, afield, aop);
+      	}
+      	try {
+      		child.open();
+  			while (child.hasNext()) {
+  				this.aggregator.mergeTupleIntoGroup(child.next());
+  			}
+  		} catch (DbException e) {
+  			e.printStackTrace();
+  		} catch (TransactionAbortedException e) {
+  			e.printStackTrace();
+  		}
+      	this.childIterator = this.aggregator.iterator();
+      }
+      
+      protected Tuple fetchNext() throws TransactionAbortedException, DbException {
+  		// some code goes here
+      	if (childIterator.hasNext()) {
+      		return childIterator.next();
+      	}
+  		return null;
+      }
+  }
+  ```
+
+### 2.3. HeapFile Mutability
+

@@ -1,9 +1,26 @@
 package simpledb;
 
+import java.io.NotActiveException;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
+import java.util.Map.Entry;
+import java.util.PrimitiveIterator.OfDouble;
+
+import sun.font.GlyphLayout.GVData;
+
 /**
  * Knows how to compute some aggregate over a set of IntFields.
  */
 public class IntegerAggregator implements Aggregator {
+	private int gbField;
+	private Type gbFieldType;
+	private int aField;
+	private Op op;
+	// HashMap uses equals() to compare the key whether the are equal or not. 如果是primitive type，如int，用==也可以。
+	private HashMap<Field, Integer> resultOfGroups;
+	private HashMap<Field, Integer> numTuplePerGroup;
+	private TupleDesc tDesc;
 
     private static final long serialVersionUID = 1L;
 
@@ -24,6 +41,17 @@ public class IntegerAggregator implements Aggregator {
 
     public IntegerAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
         // some code goes here
+    	this.gbField = gbfield;
+    	this.gbFieldType = gbfieldtype;
+    	this.aField = afield;
+    	this.op = what;
+    	this.resultOfGroups = new HashMap<Field, Integer>();
+    	this.numTuplePerGroup = new HashMap<Field, Integer>();
+    	if (gbfield == NO_GROUPING) {
+    		tDesc = new TupleDesc(new Type[]{Type.INT_TYPE}, new String[]{"aggregateValue"});
+    	} else {
+    		tDesc = new TupleDesc(new Type[]{gbfieldtype, Type.INT_TYPE}, new String[]{"groupValue", "aggregateValue"});
+    	}
     }
 
     /**
@@ -35,6 +63,54 @@ public class IntegerAggregator implements Aggregator {
      */
     public void mergeTupleIntoGroup(Tuple tup) {
         // some code goes here
+    	Field gbFieldVal = gbField==NO_GROUPING? _DUMMY_FIELD: tup.getField(gbField);
+    	int aFieldVal = ((IntField)tup.getField(aField)).getValue();
+    	if (!numTuplePerGroup.containsKey(gbFieldVal)) {
+    		numTuplePerGroup.put(gbFieldVal, 1);
+    	} else {
+    		numTuplePerGroup.replace(gbFieldVal, numTuplePerGroup.get(gbFieldVal)+1);
+    	}
+//    	if (!resultOfGroups.containsKey(gbFieldVal)) {
+//    		resultOfGroups.put(gbFieldVal, 0);
+//    	}
+		Integer oldA = resultOfGroups.get(gbFieldVal);
+    	switch (op) {
+		case MIN:
+			if (oldA == null) {
+				resultOfGroups.put(gbFieldVal, aFieldVal);
+			} else if (aFieldVal<oldA) {
+				resultOfGroups.replace(gbFieldVal, aFieldVal);
+			}
+			// 错误！如果一个已存在的key的最小值就是0呢?
+//			if (oldA==0 || aFieldVal<oldA) {
+//				resultOfGroups.replace(gbFieldVal, aFieldVal);
+//			}
+			break;
+		case MAX:
+			if (oldA == null) {
+				resultOfGroups.put(gbFieldVal, aFieldVal);
+			} else if (aFieldVal>oldA) {
+				resultOfGroups.replace(gbFieldVal, aFieldVal);
+			}
+			break;
+		case SUM:
+		case AVG:
+			if (oldA == null) {
+				resultOfGroups.put(gbFieldVal, aFieldVal);
+			} else {
+				resultOfGroups.replace(gbFieldVal, oldA+aFieldVal);
+			}
+			break;
+		case COUNT:
+			if (oldA == null) {
+				resultOfGroups.put(gbFieldVal, 1);
+			} else {
+				resultOfGroups.replace(gbFieldVal, oldA+1);
+			}
+			break;
+		default:
+			break;
+		}
     }
 
     /**
@@ -47,8 +123,63 @@ public class IntegerAggregator implements Aggregator {
      */
     public OpIterator iterator() {
         // some code goes here
-        throw new
-        UnsupportedOperationException("please implement me for lab2");
+    	return new OpIterator() {
+    		private boolean opened = false;
+    		private Iterator<Entry<Field, Integer>> it;
+			
+			@Override
+			public void rewind() throws DbException, TransactionAbortedException {
+				it = resultOfGroups.entrySet().iterator();
+			}
+			
+			@Override
+			public void open() throws DbException, TransactionAbortedException {
+				opened = true;
+				it = resultOfGroups.entrySet().iterator();
+			}
+			
+			@Override
+			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
+				if (!opened) {
+					throw new DbException("Must open() first OR have close().");
+				}
+				Tuple tuple = new Tuple(tDesc);
+				Entry<Field, Integer> nextEntry = it.next(); // it.next()可能会抛出NoSuchElementException异常。
+				if (gbField == NO_GROUPING) {
+					if (op == Op.AVG) {
+						tuple.setField(0, new IntField(nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey())));
+					} else {
+						tuple.setField(0, new IntField(nextEntry.getValue()));
+					}
+					return tuple;
+				}
+				tuple.setField(0, nextEntry.getKey()); // 只有一个StringField/IntField的实例对象，因为只读不可写，所以没问题。
+				if (op == Op.AVG) {
+					tuple.setField(1, new IntField(nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey())));
+				} else {
+					tuple.setField(1, new IntField(nextEntry.getValue()));
+				}
+				return tuple;
+			}
+			
+			@Override
+			public boolean hasNext() throws DbException, TransactionAbortedException {
+				if (!opened) {
+					throw new DbException("Must open() first OR have close().");
+				}
+				return it.hasNext();
+			}
+			
+			@Override
+			public TupleDesc getTupleDesc() {
+				return tDesc;
+			}
+			
+			@Override
+			public void close() {
+				opened = false;
+			}
+		};
     }
 
 }

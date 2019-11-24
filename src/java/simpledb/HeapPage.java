@@ -18,6 +18,8 @@ public class HeapPage implements Page {
     final byte header[];
     final Tuple tuples[];
     final int numSlots;
+    boolean dirty;
+    TransactionId lastDirtiedThePage;
 
     byte[] oldData;
     private final Byte oldDataLock=new Byte((byte)0);
@@ -242,6 +244,11 @@ public class HeapPage implements Page {
     public void deleteTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+    	int tupleNo = t.getRecordId().getTupleNumber();
+    	if (t.getRecordId().getPageId()!=pid || tupleNo >= numSlots || !isSlotUsed(tupleNo)) {
+    		throw new DbException("Tuple is not on this page, or tuple slot is already empty.");
+    	}
+    	markSlotUsed(tupleNo, false);
     }
 
     /**
@@ -254,6 +261,15 @@ public class HeapPage implements Page {
     public void insertTuple(Tuple t) throws DbException {
         // some code goes here
         // not necessary for lab1
+    	for (int i = 0; i < numSlots; i++) { // 不要用`i<header.length*8`，因为header的末尾几个位可能没被使用但却为0。
+			if (!isSlotUsed(i)) {
+				tuples[i] = t;
+				t.setRecordId(new RecordId(pid, i));
+				markSlotUsed(i, true);
+				return;
+			}
+		}
+    	throw new DbException("The page is full.");
     }
 
     /**
@@ -263,6 +279,12 @@ public class HeapPage implements Page {
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
     	// not necessary for lab1
+    	dirty = dirty;
+    	if (dirty) {
+    		lastDirtiedThePage = tid;
+    	} else {
+    		lastDirtiedThePage = null;
+    	}
     }
 
     /**
@@ -271,7 +293,7 @@ public class HeapPage implements Page {
     public TransactionId isDirty() {
         // some code goes here
     	// Not necessary for lab1
-        return null;      
+        return lastDirtiedThePage;      
     }
 
     /**
@@ -303,6 +325,11 @@ public class HeapPage implements Page {
     private void markSlotUsed(int i, boolean value) {
         // some code goes here
         // not necessary for lab1
+    	if (value) {
+    		header[i/8] |= (1<<(i%8));
+    	} else {
+    		header[i/8] &= ~(1<<(i%8));
+    	}
     }
 
     /**
