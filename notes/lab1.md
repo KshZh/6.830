@@ -50,7 +50,7 @@ The Database class provides access to a collection of static objects that are th
 
 每一个Tuple是Field对象的集合，TupleDesc是field type+field name，TupleDesc是具体的Tuple的抽象描述(schema（模式、概要）)。
 
-### Exercise 1
+**Exercise 1.**
 
 - src/simpledb/TupleDesc.java
 
@@ -80,7 +80,7 @@ The Database class provides access to a collection of static objects that are th
       	        return fieldName + "(" + fieldType + ")";
       	    }
       	}
-     	public TupleDesc(Type[] typeAr, String[] fieldAr) {}
+      public TupleDesc(Type[] typeAr, String[] fieldAr) {}
       public TupleDesc(Type[] typeAr) {}
       public int numFields() {}
       public String getFieldName(int i) throws NoSuchElementException {}
@@ -117,7 +117,7 @@ The catalog (class `Catalog` in SimpleDB) consists of a list of the tables and s
 
 The global catalog is a single instance of `Catalog` that is allocated for the entire SimpleDB process. The global catalog can be retrieved via the method `Database.getCatalog()`, and the same goes for the global buffer pool (using `Database.getBufferPool()`).
 
-### Exercise 2
+**Exercise 2.**
 
 - src/simpledb/Catalog.java
 
@@ -181,7 +181,7 @@ The global catalog is a single instance of `Catalog` that is allocated for the e
 
 The buffer pool (class `BufferPool` in SimpleDB) is responsible for caching pages in memory that have been recently read from disk. **All operators read and write pages from various files on disk through the buffer pool**. It consists of a fixed number of pages, defined by the `numPages` parameter to the `BufferPool` constructor. In later labs, you will implement an eviction policy.
 
-### Exercise 3
+**Exercise 3.**
 
 - src/simpledb/BufferPool.java
 
@@ -237,7 +237,7 @@ The ceiling operation rounds up to the nearest integer number of bytes (we never
 
 Also, note that the high-order bits of the last byte may not correspond to a slot that is actually in the file, since the number of slots may not be a multiple of 8. Also note that all Java virtual machines are big-endian.（即内存地址递增的方向，大端序会先存放最高有效字节，小端序会先存放最低有效字节）
 
-### Exercise 4
+**Exercise 4.**
 
 - src/simpledb/HeapPageId.java
 
@@ -336,7 +336,7 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
 
   通过测试HeapPageReadTest。
 
-### Exercise 5
+**Exercise 5.**
 
 - src/simpledb/HeapFile.java
 
@@ -367,7 +367,7 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
           // some code goes here
           return new DbFileIterator() {
           	boolean opened = false;
-          	boolean closed = false;
+          	// boolean closed = false; // 这个closed是多余的，因为一个迭代器要么已开启，要么已关闭。
           	int pgNo = 0;
           	Iterator<Tuple> it = null;
   			
@@ -387,7 +387,8 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
   			@Override
   			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
   				// TODO Auto-generated method stub
-  				if (!opened || closed)
+  				// if (!opened || closed)
+                  if (!opened)
   					throw new NoSuchElementException();
   				// 这里假定caller每次都会先检查hasNext()再调用next()，所以没有做更多的检查。
   				return it.next();
@@ -396,7 +397,8 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
   			@Override
   			public boolean hasNext() throws DbException, TransactionAbortedException {
   				// TODO Auto-generated method stub
-  				if (!opened || closed)
+  				// if (!opened || closed)
+                  if (!opened)
   					return false;
   				if (pgNo > numPages)
   					return false;
@@ -412,13 +414,14 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
   			@Override
   			public void close() {
   				// TODO Auto-generated method stub
-  				closed = true;
+  				// closed = true;
+                  opened = false;
   			}
   		};
-      }
+    }
   }
   ```
-
+  
   通过测试HeapFileReadTest。
 
 ### 2.6. Operators
@@ -427,7 +430,7 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
 
 **At the top of the plan, the program interacting with SimpleDB simply calls `getNext` on the root operator; this operator then calls `getNext` on its children, and so on, until these leaf operators are called. They fetch tuples from disk and pass them up the tree (as return arguments to `getNext`); tuples propagate up the plan in this way until they are output at the root or combined or rejected by another operator in the plan.**
 
-### Exercise 6
+**Exercise 6.**
 
 - src/simpledb/SeqScan.java
 

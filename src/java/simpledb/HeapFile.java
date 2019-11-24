@@ -120,7 +120,6 @@ public class HeapFile implements DbFile {
         // some code goes here
         return new DbFileIterator() {
         	boolean opened = false;
-        	boolean closed = false;
         	int pgNo = 0;
         	Iterator<Tuple> it = null;
 			
@@ -140,7 +139,7 @@ public class HeapFile implements DbFile {
 			@Override
 			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
 				// TODO Auto-generated method stub
-				if (!opened || closed)
+				if (!opened)
 					throw new NoSuchElementException();
 				// 这里假定caller每次都会先检查hasNext()再调用next()，所以没有做更多的检查。
 				return it.next();
@@ -149,7 +148,7 @@ public class HeapFile implements DbFile {
 			@Override
 			public boolean hasNext() throws DbException, TransactionAbortedException {
 				// TODO Auto-generated method stub
-				if (!opened || closed)
+				if (!opened)
 					return false;
 				if (pgNo > numPages)
 					return false;
@@ -165,7 +164,7 @@ public class HeapFile implements DbFile {
 			@Override
 			public void close() {
 				// TODO Auto-generated method stub
-				closed = true;
+				opened = false;
 			}
 		};
     }

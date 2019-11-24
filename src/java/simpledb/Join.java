@@ -2,10 +2,18 @@ package simpledb;
 
 import java.util.*;
 
+import com.sun.org.apache.xpath.internal.axes.ChildIterator;
+
 /**
  * The Join operator implements the relational join operation.
  */
 public class Join extends Operator {
+	private JoinPredicate joinPredicate;  // JoinPredicate中已经包含了要比较的两个Tuple的两个字段的编号。
+	private OpIterator childIterator1;
+	private OpIterator childIterator2;
+	private TupleDesc tupleDesc;
+	private Tuple pendingTuple1;
+	private Tuple pendingTuple2;
 
     private static final long serialVersionUID = 1L;
 
@@ -22,11 +30,17 @@ public class Join extends Operator {
      */
     public Join(JoinPredicate p, OpIterator child1, OpIterator child2) {
         // some code goes here
+    	this.joinPredicate = p;
+    	this.childIterator1 = child1;
+    	this.childIterator2 = child2;
+    	this.tupleDesc = TupleDesc.merge(childIterator1.getTupleDesc(), childIterator2.getTupleDesc());
+    	this.pendingTuple1 = null;
+    	this.pendingTuple2 = null;
     }
 
     public JoinPredicate getJoinPredicate() {
         // some code goes here
-        return null;
+        return joinPredicate;
     }
 
     /**
@@ -36,7 +50,7 @@ public class Join extends Operator {
      * */
     public String getJoinField1Name() {
         // some code goes here
-        return null;
+        return childIterator1.getTupleDesc().getFieldName(joinPredicate.getField1());
     }
 
     /**
@@ -46,7 +60,7 @@ public class Join extends Operator {
      * */
     public String getJoinField2Name() {
         // some code goes here
-        return null;
+        return childIterator2.getTupleDesc().getFieldName(joinPredicate.getField2());
     }
 
     /**
@@ -55,20 +69,28 @@ public class Join extends Operator {
      */
     public TupleDesc getTupleDesc() {
         // some code goes here
-        return null;
+        return tupleDesc;
     }
 
     public void open() throws DbException, NoSuchElementException,
             TransactionAbortedException {
         // some code goes here
+    	super.open();
+    	childIterator1.open();
+    	childIterator2.open();
     }
 
     public void close() {
         // some code goes here
+    	super.close();
+    	childIterator1.close();
+    	childIterator2.close();
     }
 
     public void rewind() throws DbException, TransactionAbortedException {
         // some code goes here
+    	childIterator1.rewind();
+    	childIterator2.rewind();
     }
 
     /**
@@ -91,18 +113,58 @@ public class Join extends Operator {
      */
     protected Tuple fetchNext() throws TransactionAbortedException, DbException {
         // some code goes here
+    	// 注意，join做的操作是笛卡尔积，而不是简单地把行号相等的行连接起来。
+    	Tuple tuple = new Tuple(tupleDesc);
+    	Tuple tuple1, tuple2;
+    	while (childIterator1.hasNext() || pendingTuple1!=null) {
+    		if (pendingTuple1 != null) {
+    			tuple1 = pendingTuple1;
+    			pendingTuple1 = null;
+    		} else {
+    			tuple1 = childIterator1.next();	
+    		}
+    		if (pendingTuple2 == null) {
+    			childIterator2.rewind();
+    		}
+    		while (childIterator2.hasNext() || pendingTuple2!=null) {
+    			if (pendingTuple2 != null) {
+    				tuple2 = pendingTuple2;
+    				pendingTuple2 = null;
+    			} else {
+    				tuple2 = childIterator2.next();
+    			}
+	    		if (joinPredicate.filter(tuple1, tuple2)) {
+	    			int n = 0;
+	    			for (int i = 0; i < tuple1.getTupleDesc().numFields(); i++, n++) {
+						tuple.setField(n, tuple1.getField(i));
+					}
+	    			for (int i = 0; i < tuple2.getTupleDesc().numFields(); i++, n++) {
+						tuple.setField(n, tuple2.getField(i));
+					}
+	    			if (childIterator2.hasNext()) {
+	    				 pendingTuple2 = childIterator2.next();
+	    				 pendingTuple1 = tuple1;
+	    			} else {
+	    				// pendingTuple1和pendingTuple2继续保持为null。
+	    			}
+	    			return tuple;
+	    		}
+    		}
+    	}
         return null;
     }
 
     @Override
     public OpIterator[] getChildren() {
         // some code goes here
-        return null;
+    	return new OpIterator[]{childIterator1, childIterator2};
     }
 
     @Override
     public void setChildren(OpIterator[] children) {
         // some code goes here
+    	childIterator1 = children[0];
+    	childIterator2 = children[1];
     }
 
 }

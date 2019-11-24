@@ -52,5 +52,4 @@ public interface OpIterator extends Serializable{
    * hasNext(), or rewind() should fail by throwing IllegalStateException.
    */
   public void close();
-
 }

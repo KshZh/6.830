@@ -8,9 +8,9 @@ import java.util.NoSuchElementException;
  * <code>open</code> and <code>readNext</code>.
  */
 public abstract class Operator implements OpIterator {
-
+	// 提取了一个较为通用的迭代模式。
     private static final long serialVersionUID = 1L;
-
+    
     public boolean hasNext() throws DbException, TransactionAbortedException {
         if (!this.open)
             throw new IllegalStateException("Operator not yet open");
