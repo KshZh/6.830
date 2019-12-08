@@ -10,7 +10,7 @@ SimpleDB是一个简单的DBMS。
 
 **面向接口编程！**
 
-我们应该更侧重于接口，设定接口，设置输入输出，当对该接口的实现经过测试基本正确工作后，我们不应该总是纠结、回想接口的具体实现，而是应该、甚至可以把已经正确工作的实现抛在脑后，然后只看接口来进行编程。我们的变量也应该更多地声明为接口类型，而不是实现接口的具体类型。
+**我们应该更侧重于接口，设定接口，设置接口中的操作的输入输出，当对该接口的实现经过测试基本正确工作后，我们不应该总是纠结、回想接口的具体实现，而是应该、甚至可以把已经正确工作的实现抛在脑后，然后只关注接口来进行编程。我们的变量也应该更多地声明为接口类型，而不是实现接口的具体类型。**
 
 **Here's a rough outline of one way you might proceed with your SimpleDB implementation:**
 
@@ -48,7 +48,54 @@ The Database class provides access to a collection of static objects that are th
 
 ### 2.2. Fields and Tuples
 
-每一个Tuple是Field对象的集合，TupleDesc是field type+field name，TupleDesc是具体的Tuple的抽象描述(schema（模式、概要）)。
+TupleDesc实际上也就是一个schema，schema是键值对`<attribute name: domain>`的集合，其中attribute name表达了该属性的含义，domain是属性可取值的类型和范围。表/关系是一个schema的实例，是元组(tuple)的集合，tuple则存储了具体的属性值，在SimpleDB中，这个属性值就是Field对象。
+
+比如，存储一个人的信息的表，它的schema可能是`{<name: string>, <age: int[0, 200]>}`，它是一个描述性的东西，我并不能通过这个schema查到李四多少岁了，但我可以查询由这个schema描述的表，该表中存储了真正能被处理的数据，表中也许有这样一个tuple：{"李四", 32}，那么通过查表我就知道李四的年龄是32岁。
+
+总的来说，schema就是具体的表/关系的抽象描述，类似于OOP中的类与类实例。
+
+#### Interface:
+
+##### Field
+
+```java
+/**
+ * Interface for values of fields in tuples in SimpleDB.
+ */
+public interface Field extends Serializable{
+    /**
+     * Write the bytes representing this field to the specified
+     * DataOutputStream.
+     * @see DataOutputStream
+     * @param dos The DataOutputStream to write to.
+     */
+    void serialize(DataOutputStream dos) throws IOException;
+
+    /**
+     * Compare the value of this field object to the passed in value.
+     * @param op The operator
+     * @param value The value to compare this Field to
+     * @return Whether or not the comparison yields true.
+     */
+    public boolean compare(Predicate.Op op, Field value);
+
+    /**
+     * Returns the type of this field (see {@link Type#INT_TYPE} or {@link Type#STRING_TYPE}
+     * @return type of this field
+     */
+    public Type getType();
+    
+    /**
+     * Hash code.
+     * Different Field objects representing the same value should probably
+     * return the same hashCode.
+     */
+    public int hashCode();
+    public boolean equals(Object field);
+
+    public String toString();
+}
+```
 
 **Exercise 1.**
 
@@ -56,47 +103,19 @@ The Database class provides access to a collection of static objects that are th
 
   ```java
   public class TupleDesc implements Serializable {
-  	private ArrayList<TDItem> tdItems;
+  	private ArrayList<TDItem> tdItems; // 使用容器的好处之一是，使用容器的类一般可以很容易借助容器的迭代器构造出该类的迭代器。
       
           public static class TDItem implements Serializable {
       	    private static final long serialVersionUID = 1L;
-  	
-      	    /**
-      	     * The type of the field
-      	     * */
+              
       	    public final Type fieldType;
-      	    
-      	    /**
-      	     * The name of the field
-      	     * */
       	    public final String fieldName;
-  	
-      	    public TDItem(Type t, String n) {
-      	        this.fieldName = n;
-      	        this.fieldType = t;
-      	    }
-  	
-      	    public String toString() {
-      	        return fieldName + "(" + fieldType + ")";
-      	    }
       	}
-      public TupleDesc(Type[] typeAr, String[] fieldAr) {}
-      public TupleDesc(Type[] typeAr) {}
-      public int numFields() {}
-      public String getFieldName(int i) throws NoSuchElementException {}
-      public Type getFieldType(int i) throws NoSuchElementException {}
-      public int fieldNameToIndex(String name) throws NoSuchElementException {}
-      /**
-       * @return The size (in bytes) of tuples corresponding to this TupleDesc.
-       *         Note that tuples from a given TupleDesc are of a fixed size.
-       */
-      public int getSize() {}
-      public static TupleDesc merge(TupleDesc td1, TupleDesc td2) {}
-      public boolean equals(Object o) {}
+  }
   ```
-
+  
   通过测试TupleDescTest。
-
+  
 - src/simpledb/Tuple.java
 
   ```java
@@ -117,17 +136,160 @@ The catalog (class `Catalog` in SimpleDB) consists of a list of the tables and s
 
 The global catalog is a single instance of `Catalog` that is allocated for the entire SimpleDB process. The global catalog can be retrieved via the method `Database.getCatalog()`, and the same goes for the global buffer pool (using `Database.getBufferPool()`).
 
+#### Interface:
+
+##### DbFile
+
+```java
+/**
+ * The interface for database files on disk. Each table is represented by a
+ * single DbFile. DbFiles can fetch pages and iterate through tuples. Each
+ * file has a unique id used to store metadata about the table in the Catalog.
+ * DbFiles are generally accessed through the buffer pool, rather than directly
+ * by operators.
+ */
+public interface DbFile {
+    /**
+     * Read the specified page from disk.
+     *
+     * @throws IllegalArgumentException if the page does not exist in this file.
+     */
+    public Page readPage(PageId id);
+
+    /**
+     * Push the specified page to disk.
+     *
+     * @param p The page to write.  page.getId().pageno() specifies the offset into the file where the page should be written.
+     * @throws IOException if the write fails
+     *
+     */
+    public void writePage(Page p) throws IOException;
+
+    /**
+     * Inserts the specified tuple to the file on behalf of transaction.
+     * This method will acquire a lock on the affected pages of the file, and
+     * may block until the lock can be acquired.
+     *
+     * @param tid The transaction performing the update
+     * @param t The tuple to add.  This tuple should be updated to reflect that
+     *          it is now stored in this file.
+     * @return An ArrayList contain the pages that were modified
+     * @throws DbException if the tuple cannot be added
+     * @throws IOException if the needed file can't be read/written
+     */
+    public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
+        throws DbException, IOException, TransactionAbortedException;
+
+    /**
+     * Removes the specified tuple from the file on behalf of the specified
+     * transaction.
+     * This method will acquire a lock on the affected pages of the file, and
+     * may block until the lock can be acquired.
+     *
+     * @param tid The transaction performing the update
+     * @param t The tuple to delete.  This tuple should be updated to reflect that
+     *          it is no longer stored on any page.
+     * @return An ArrayList contain the pages that were modified
+     * @throws DbException if the tuple cannot be deleted or is not a member
+     *   of the file
+     */
+    public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t)
+        throws DbException, IOException, TransactionAbortedException;
+
+    /**
+     * Returns an iterator over all the tuples stored in this DbFile. The
+     * iterator must use {@link BufferPool#getPage}, rather than
+     * {@link #readPage} to iterate through the pages.
+     *
+     * @return an iterator over all the tuples stored in this DbFile.
+     */
+    public DbFileIterator iterator(TransactionId tid);
+
+    /**
+     * Returns a unique ID used to identify this DbFile in the Catalog. This id
+     * can be used to look up the table via {@link Catalog#getDatabaseFile} and
+     * {@link Catalog#getTupleDesc}.
+     * <p>
+     * Implementation note:  you will need to generate this tableid somewhere,
+     * ensure that each HeapFile has a "unique id," and that you always
+     * return the same value for a particular HeapFile. A simple implementation
+     * is to use the hash code of the absolute path of the file underlying
+     * the HeapFile, i.e. <code>f.getAbsoluteFile().hashCode()</code>.
+     *
+     * @return an ID uniquely identifying this HeapFile.
+     */
+    public int getId();
+    
+    /**
+     * Returns the TupleDesc of the table stored in this DbFile.
+     * @return TupleDesc of this DbFile.
+     */
+    public TupleDesc getTupleDesc();
+}
+```
+
+##### DbFileIterator
+
+```java
+/**
+ * DbFileIterator is the iterator interface that all SimpleDB Dbfile should
+ * implement.
+ */
+public interface DbFileIterator{
+    /**
+     * Opens the iterator
+     * @throws DbException when there are problems opening/accessing the database.
+     */
+    public void open()
+        throws DbException, TransactionAbortedException;
+
+    /** @return true if there are more tuples available, false if no more tuples or iterator isn't open. */
+    public boolean hasNext()
+        throws DbException, TransactionAbortedException;
+
+    /**
+     * Gets the next tuple from the operator (typically implementing by reading
+     * from a child operator or an access method).
+     *
+     * @return The next tuple in the iterator.
+     * @throws NoSuchElementException if there are no more tuples
+     */
+    public Tuple next()
+        throws DbException, TransactionAbortedException, NoSuchElementException;
+
+    /**
+     * Resets the iterator to the start.
+     * @throws DbException When rewind is unsupported.
+     */
+    public void rewind() throws DbException, TransactionAbortedException;
+
+    /**
+     * Closes the iterator.
+     */
+    public void close();
+}
+```
+
 **Exercise 2.**
 
 - src/simpledb/Catalog.java
 
   ```java
+  /**
+   * The Catalog keeps track of all available tables in the database and their
+   * associated schemas.
+   * For now, this is a stub catalog that must be populated with tables by a
+   * user program before it can be used -- eventually, this should be converted
+   * to a catalog that reads a catalog table from disk.
+   * 
+   * @Threadsafe
+   */
   public class Catalog {
   	private HashMap<Integer, Table> tables;
-  	private HashMap<String, Integer> name2Id;
+  	private HashMap<String, Integer> name2ID;
   	
   	private class Table {
-  		public String tableName; // 不应该是final的，因为这些按理说可以修改。
+  		public String tableName;
   		public DbFile dbFile; // 一个Table与一个DbFile关联。
   		public String pkeyField;
   		
@@ -148,47 +310,123 @@ The global catalog is a single instance of `Catalog` that is allocated for the e
        */
       public void addTable(DbFile file, String name, String pkeyField) {
           // some code goes here
-      	// this.tables.put(file.getId(), new Table(file, name, pkeyField));
-      	if (name2Id.containsKey(name)) {
-      		name2Id.replace(name, file.getId());
-      		if (tables.containsKey(file.getId())) {
-      			tables.replace(file.getId(), new Table(file, name, pkeyField));
-      		} else {
-      			tables.put(file.getId(), new Table(file, name, pkeyField));
-      		}
+      	if (name2ID.containsKey(name)) {
+      		tables.remove(name2ID.get(name));
+      		name2ID.replace(name, file.getId());
       	} else {
-      		name2Id.put(name, file.getId());
-      		tables.put(file.getId(), new Table(file, name, pkeyField));
+      		name2ID.put(name, file.getId());
       	}
+  		tables.put(file.getId(), new Table(file, name, pkeyField));
       }
-      public int getTableId(String name) throws NoSuchElementException {}
-      public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {}
-      public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {}
-      public String getPrimaryKey(int tableid) {}
-      public Iterator<Integer> tableIdIterator() {}
-      public String getTableName(int id) {}
-      public void clear() {}
-  	/**
-       * Reads the schema from a file and creates the appropriate tables in the database.
-       * @param catalogFile
-       */
-      public void loadSchema(String catalogFile) {}
+  
+      public void addTable(DbFile file, String name) {
+          addTable(file, name, "");
+      }
+  }
   ```
-
+  
   通过测试CatalogTest。
 
 ### 2.4. BufferPool
 
-The buffer pool (class `BufferPool` in SimpleDB) is responsible for caching pages in memory that have been recently read from disk. **All operators read and write pages from various files on disk through the buffer pool**. It consists of a fixed number of pages, defined by the `numPages` parameter to the `BufferPool` constructor. In later labs, you will implement an eviction policy.
+The buffer pool (class `BufferPool` in SimpleDB) is **responsible for caching pages in memory that have been recently read from disk.** **All operators read and write pages from various files on disk through the buffer pool.（这是必须的，不然缓存就失去了意义，使得存取效率并没有得到提升，也使一致性难以维护）** It consists of a fixed number of pages, defined by the `numPages` parameter to the `BufferPool` constructor. In later labs, you will implement an eviction policy.
+
+#### Interface:
+
+##### Page
+
+```java
+/**
+ * Page is the interface used to represent pages that are resident in the
+ * BufferPool.  Typically, DbFiles will read and write pages from disk.
+ * <p>
+ * Pages may be "dirty", indicating that they have been modified since they
+ * were last written out to disk.
+ *
+ * For recovery purposes, pages MUST have a single constructor of the form:
+ *     Page(PageId id, byte[] data)
+ */
+public interface Page {
+
+    /**
+     * Return the id of this page.  The id is a unique identifier for a page
+     * that can be used to look up the page on disk or determine if the page
+     * is resident in the buffer pool.
+     *
+     * @return the id of this page
+     */
+    public PageId getId();
+
+    /**
+     * Get the id of the transaction that last dirtied this page, or null if the page is clean..
+     *
+     * @return The id of the transaction that last dirtied this page, or null
+     */
+    public TransactionId isDirty();
+
+  /**
+   * Set the dirty state of this page as dirtied by a particular transaction
+   */
+    public void markDirty(boolean dirty, TransactionId tid);
+
+  /**
+   * Generates a byte array representing the contents of this page.
+   * Used to serialize this page to disk.
+   * <p>
+   * The invariant here is that it should be possible to pass the byte array
+   * generated by getPageData to the Page constructor and have it produce
+   * an identical Page object.
+   *
+   * @return A byte array correspond to the bytes of this page.
+   */
+
+    public byte[] getPageData();
+
+    /** Provide a representation of this page before any modifications were made
+        to it.  Used by recovery.
+    */
+    public Page getBeforeImage();
+
+    /*
+     * a transaction that wrote this page just committed it.
+     * copy current content to the before image.
+     */
+    public void setBeforeImage();
+}
+```
+
+DbFile是Page的集合，Page也是BufferPool缓存的单位。注意到开头的注释，从磁盘中读取Page和将Page写入磁盘都是由Page所属的DbFile负责的（分别是DbFile.readPage()和DbFile.writePage()），这是可以理解的，从概念上，DbFile是Page的集合，那么DbFile也应该负责存取Page。另一方面，如果不这么做，而是由BufferPool负责存取Page，那么会使得系统不太好扩展，至少如果我们要往系统中加入一个新的DbFile实现，那么我们就需要改动BufferPool的相关代码，添加类型分派分支。而有DbFile负责存取Page，那么当添加一个新的DbFile实现时，只需实现这个新的DbFile的存取Page的方法，而不需要改动BufferPool的任何代码。**这使得编程人员不需要了解系统其它部分的具体实现（如BufferPool的具体实现）即可对系统进行扩展。**
 
 **Exercise 3.**
 
 - src/simpledb/BufferPool.java
 
   ```java
+  /**
+   * BufferPool manages the reading and writing of pages into memory from
+   * disk. Access methods call into it to retrieve pages, and it fetches
+   * pages from the appropriate location.
+   * <p>
+   * The BufferPool is also responsible for locking;  when a transaction fetches
+   * a page, BufferPool checks that the transaction has the appropriate
+   * locks to read/write the page.
+   * 
+   * @Threadsafe, all fields are final
+   */
   public class BufferPool {
   	private int numPages;
   	private HashMap<PageId, Page> pages;
+  	
+      /** Bytes per page, including header. */
+      private static final int DEFAULT_PAGE_SIZE = 4096;
+  
+      private static int pageSize = DEFAULT_PAGE_SIZE;
+      
+      /** Default number of pages passed to the constructor. This is used by
+      other classes. BufferPool should use the numPages argument to the
+      constructor instead. */
+      public static final int DEFAULT_PAGES = 50;
+      
       /**
        * Retrieve the specified page with the associated permissions.
        * Will acquire a lock and may block if that lock is held by another
@@ -204,7 +442,7 @@ The buffer pool (class `BufferPool` in SimpleDB) is responsible for caching page
        * @param pid the ID of the requested page
        * @param perm the requested permissions on the page
        */
-      public Page getPage(TransactionId tid, PageId pid, Permissions perm)
+      public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
           throws TransactionAbortedException, DbException {
           // some code goes here
       	if (pages.size() > numPages)
@@ -213,17 +451,15 @@ The buffer pool (class `BufferPool` in SimpleDB) is responsible for caching page
       		return pages.get(pid);
       	} else { // cache miss.
       		DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+      		// XXX 面向接口编程，即使我还没实现DbFile.readPage()，但我知道它的行为、它的输入输出(不需要关心具体实现，如怎么定位到指定的Page，而且不同的具体类型实现也不同)，那么我就可以直接编写出这部分代码。
       		Page page = dbFile.readPage(pid);
       		pages.put(pid, page);
       		return page;
       	}
       }
-  }
   ```
 
 ### 2.5. HeapFile access method
-
-![](./img/lab1-01.png)
 
 BufferPool在内存中缓存Page，HeapFile是HeapPage的集合，HeapPage是tuple的集合，HeapPage首先有一个header，这是一个bitmap，故每一个tuple在HeapPage中占用的bit数为`tuple size * 8 + 1`。从磁盘中读写Page是由DbFile的readPage()负责的，其它对象读写Page都是通过BufferPool的getPage()来获取，getPage()如果缓存miss，则委托DbFile的readPage()从磁盘读入Page。
 
@@ -516,7 +752,6 @@ public class TestLab1 {
         // tuples via its iterator.
         TransactionId tid = new TransactionId();
         SeqScan f = new SeqScan(tid, table1.getId());
-        System.out.println(1);
         try {
             // and run it
             f.open();

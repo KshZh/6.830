@@ -19,7 +19,6 @@ public class TestLab1 {
         // tuples via its iterator.
         TransactionId tid = new TransactionId();
         SeqScan f = new SeqScan(tid, table1.getId());
-        System.out.println(1);
         try {
             // and run it
             f.open();

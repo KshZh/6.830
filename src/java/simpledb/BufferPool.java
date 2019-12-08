@@ -78,6 +78,7 @@ public class BufferPool {
     		return pages.get(pid);
     	} else { // cache miss.
     		DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+    		// XXX 面向接口编程，即使我还没实现DbFile.readPage()，但我知道它的行为、它的输入输出(不需要关心具体实现，如怎么定位到指定的Page，而且不同的具体类型实现也不同)，那么我就可以直接编写出这部分代码。
     		Page page = dbFile.readPage(pid);
     		pages.put(pid, page);
     		return page;

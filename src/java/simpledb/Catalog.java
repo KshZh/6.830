@@ -18,10 +18,10 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class Catalog {
 	private HashMap<Integer, Table> tables;
-	private HashMap<String, Integer> name2Id;
+	private HashMap<String, Integer> name2ID;
 	
 	private class Table {
-		public String tableName; // 不应该是final的，因为这些按理说可以修改。
+		public String tableName;
 		public DbFile dbFile; // 一个Table与一个DbFile关联。
 		public String pkeyField;
 		
@@ -39,7 +39,7 @@ public class Catalog {
     public Catalog() {
         // some code goes here
     	this.tables = new HashMap<Integer, Catalog.Table>();
-    	this.name2Id = new HashMap<String, Integer>();
+    	this.name2ID = new HashMap<String, Integer>();
     }
 
     /**
@@ -53,18 +53,13 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
-    	// this.tables.put(file.getId(), new Table(file, name, pkeyField));
-    	if (name2Id.containsKey(name)) {
-    		name2Id.replace(name, file.getId());
-    		if (tables.containsKey(file.getId())) {
-    			tables.replace(file.getId(), new Table(file, name, pkeyField));
-    		} else {
-    			tables.put(file.getId(), new Table(file, name, pkeyField));
-    		}
+    	if (name2ID.containsKey(name)) {
+    		tables.remove(name2ID.get(name));
+    		name2ID.replace(name, file.getId());
     	} else {
-    		name2Id.put(name, file.getId());
-    		tables.put(file.getId(), new Table(file, name, pkeyField));
+    		name2ID.put(name, file.getId());
     	}
+		tables.put(file.getId(), new Table(file, name, pkeyField));
     }
 
     public void addTable(DbFile file, String name) {
@@ -88,9 +83,9 @@ public class Catalog {
      */
     public int getTableId(String name) throws NoSuchElementException {
         // some code goes here
-    	if (!name2Id.containsKey(name))
+    	if (!name2ID.containsKey(name))
     		throw new NoSuchElementException();
-    	return tables.get(name2Id.get(name)).dbFile.getId();
+    	return name2ID.get(name);
     }
 
     /**
