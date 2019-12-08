@@ -19,6 +19,7 @@ public class Debug {
       if (debug == null) {
           // No system property = disabled
           DEBUG_LEVEL = -1;
+    	  // DEBUG_LEVEL = 1;
       } else if (debug.length() == 0) {
           // Empty property = level 0
           DEBUG_LEVEL = 0;
@@ -27,7 +28,7 @@ public class Debug {
       }
   }
 
-  private static final int DEFAULT_LEVEL = 0;
+  private static final int DEFAULT_LEVEL = 1;
 
   /** Log message if the log level >= level. Uses printf. */
   public static void log(int level, String message, Object... args) {

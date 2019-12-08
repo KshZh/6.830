@@ -3,19 +3,17 @@ package simpledb;
 import java.io.File;
 import java.util.*;
 
-import sun.net.www.protocol.http.HttpURLConnection.TunnelState;
-
 /**
  * SeqScan is an implementation of a sequential scan access method that reads
  * each tuple of a table in no particular order (e.g., as they are laid out on
  * disk).
  */
 public class SeqScan implements OpIterator {
-	private TransactionId tId;
-	private int tableId;
+	private TransactionId tID;
+	private int tableID;
 	private String tableAlias;
 	private DbFile dbFile;
-	private DbFileIterator iterator;
+	private DbFileIterator child;
 
     private static final long serialVersionUID = 1L;
 
@@ -37,11 +35,11 @@ public class SeqScan implements OpIterator {
      */
     public SeqScan(TransactionId tid, int tableid, String tableAlias) {
         // some code goes here
-    	this.tId = tid;
-    	this.tableId = tableid;
+    	this.tID = tid;
+    	this.tableID = tableid;
     	this.tableAlias = tableAlias;
-    	this.dbFile = Database.getCatalog().getDatabaseFile(tableId);
-    	this.iterator = dbFile.iterator(tId);
+    	this.dbFile = Database.getCatalog().getDatabaseFile(tableID);
+    	this.child = dbFile.iterator(tID);
     }
     
     public SeqScan(TransactionId tid, int tableId) {
@@ -54,7 +52,7 @@ public class SeqScan implements OpIterator {
      *       be the actual name of the table in the catalog of the database
      * */
     public String getTableName() {
-        return Database.getCatalog().getTableName(tableId);
+        return Database.getCatalog().getTableName(tableID);
     }
 
     /**
@@ -62,7 +60,6 @@ public class SeqScan implements OpIterator {
      * */
     public String getAlias()
     {
-        // some code goes here
         return tableAlias;
     }
 
@@ -79,14 +76,12 @@ public class SeqScan implements OpIterator {
      *            tableAlias.null, or null.null).
      */
     public void reset(int tableid, String tableAlias) {
-        // some code goes here
-    	this.tableId = tableid;
+    	this.tableID = tableid;
     	this.tableAlias = tableAlias;
     }
 
     public void open() throws DbException, TransactionAbortedException {
-        // some code goes here
-    	iterator.open();
+    	child.open();
     }
 
     /**
@@ -100,41 +95,35 @@ public class SeqScan implements OpIterator {
      *         prefixed with the tableAlias string from the constructor.
      */
     public TupleDesc getTupleDesc() {
-        // some code goes here
-    	// 没有检查this.dbFile是否不为null，即caller是否先调用了open()。
         TupleDesc tupleDesc = dbFile.getTupleDesc();
         Type[] typeAr = new Type[tupleDesc.numFields()];
         String[] fieldAr = new String[tupleDesc.numFields()];
         for (int i = 0; i < tupleDesc.numFields(); i++) {
         	typeAr[i] = tupleDesc.getFieldType(i);
-			fieldAr[i] = tableAlias + "." + tupleDesc.getFieldName(i);
+			fieldAr[i] = tableAlias + "." + tupleDesc.getFieldName(i); // 给属性名加上表名前缀。
 		}
 		return new TupleDesc(typeAr, fieldAr);
     }
 
     public boolean hasNext() throws TransactionAbortedException, DbException {
-        // some code goes here
-    	if (dbFile==null || iterator==null)
+    	if (dbFile==null || child==null)
     		throw new IllegalStateException();
-        return iterator.hasNext();
+        return child.hasNext();
     }
 
     public Tuple next() throws NoSuchElementException,
             TransactionAbortedException, DbException {
-        // some code goes here
-    	if (dbFile==null || iterator==null)
+    	if (dbFile==null || child==null)
     		throw new IllegalStateException();
-        return iterator.next();
+        return child.next();
     }
 
     public void close() {
-        // some code goes here
-    	iterator.close();
+    	child.close();
     }
 
     public void rewind() throws DbException, NoSuchElementException,
             TransactionAbortedException {
-        // some code goes here
-    	iterator.rewind();
+    	child.rewind();
     }
 }

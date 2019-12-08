@@ -1,5 +1,7 @@
 package simpledb;
 
+import static org.junit.Assert.assertNotNull;
+
 import java.io.*;
 import java.util.*;
 
@@ -14,10 +16,10 @@ import java.util.*;
  * @author Sam Madden
  */
 public class HeapFile implements DbFile {
-	private File file;
+	private File file; // 磁盘文件，真正存储数据的地方。
 	private TupleDesc tDesc;
 	private int numPages;
-	private int tableId;
+	private int tableID;
 
     /**
      * Constructs a heap file backed by the specified file.
@@ -31,7 +33,7 @@ public class HeapFile implements DbFile {
     	this.file = f;
     	this.tDesc = td;
     	this.numPages = (int) Math.floor(file.length()/BufferPool.getPageSize());
-    	this.tableId = file.getAbsoluteFile().hashCode();
+    	this.tableID = file.getAbsoluteFile().hashCode();
     }
 
     /**
@@ -55,7 +57,7 @@ public class HeapFile implements DbFile {
      */
     public int getId() {
         // some code goes here
-        return tableId;
+        return tableID;
     }
 
     /**
@@ -76,12 +78,11 @@ public class HeapFile implements DbFile {
 	    	RandomAccessFile iFile = new RandomAccessFile(file, "r");
 	    	iFile.seek(pid.getPageNumber()*BufferPool.getPageSize());
 	    	iFile.read(buf);
-	    	if (tableId == 0)
-	    		tableId = pid.getTableId();
+	    	if (tableID == 0)
+	    		tableID = pid.getTableId();
 	    	return new HeapPage((HeapPageId) pid, buf);
 		} catch (IOException e) {
-			e.printStackTrace();
-			return null; // TODO
+			throw new RuntimeException(e);
 		}
     }
 
@@ -106,7 +107,7 @@ public class HeapFile implements DbFile {
     	BufferPool bufferPool = Database.getBufferPool();
     	ArrayList<Page> arrayList = new ArrayList<Page>();
     	for (int i = 0; i < numPages; i++) {
-			HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableId, i), null);
+			HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, i), null);
 			if (page.getNumEmptySlots() != 0) {
 				page.insertTuple(t);
 				arrayList.add(page);
@@ -114,7 +115,7 @@ public class HeapFile implements DbFile {
 			}
 		}
     	numPages++;
-    	HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableId, numPages-1), null);
+    	HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, numPages-1), null);
     	page.insertTuple(t);
 		arrayList.add(page);
 		return arrayList;
@@ -128,55 +129,49 @@ public class HeapFile implements DbFile {
     }
 
     // see DbFile.java for javadocs
+	// 这使得客户可以得到一个表/DbFile的迭代器，迭代表中的Tuple。
     public DbFileIterator iterator(TransactionId tid) {
-        // some code goes here
         return new DbFileIterator() {
-        	boolean opened = false;
-        	int pgNo = 0;
-        	Iterator<Tuple> it = null;
+        	private final BufferPool pool = Database.getBufferPool();
+        	// private boolean opened = false; // 利用`pgNo>=0`这个不变量，可以用pgNo的负值作为open()和close()的标志。
+        	private int pgNo = -1;
+        	private Iterator<Tuple> child = null;
 			
 			@Override
 			public void rewind() throws DbException, TransactionAbortedException {
-				// TODO Auto-generated method stub
 				pgNo = 0;
-				it = null;
+				child = null;
 			}
 			
 			@Override
 			public void open() throws DbException, TransactionAbortedException {
-				// TODO Auto-generated method stub
-				opened = true;
+				pgNo = 0;
 			}
 			
 			@Override
 			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
-				// TODO Auto-generated method stub
-				if (!opened)
+				if (pgNo<0 || !hasNext())
 					throw new NoSuchElementException();
-				// 这里假定caller每次都会先检查hasNext()再调用next()，所以没有做更多的检查。
-				return it.next();
+				return child.next();
 			}
 			
 			@Override
 			public boolean hasNext() throws DbException, TransactionAbortedException {
-				// TODO Auto-generated method stub
-				if (!opened)
+				if (pgNo<0 || pgNo>numPages)
 					return false;
-				if (pgNo > numPages)
-					return false;
-				if (it == null)
-					it = ((HeapPage) Database.getBufferPool().getPage(tid, new HeapPageId(tableId, pgNo), null)).iterator();
-				if (!it.hasNext() && pgNo+1<numPages) { // XXX 注意pgNo是从0开始的，而numPages是Page数组大小。
-					pgNo++;
-					it = ((HeapPage) Database.getBufferPool().getPage(tid, new HeapPageId(tableId, pgNo), null)).iterator();
+				// 这里要注意检查边界，客户会一直调用hasNext()直到返回False，甚至返回False后继续调用，我们无法保证客户的行为。
+				// XXX 还要注意，`child==null`只会在迭代器最开始时成立一次（如果不rewind()的话），之后如果`!child.hasNext()`成立，
+				// 也就是说这个Page的有效的（查header的bitmap）Tuple已经遍历完了，而且这时该DbFile还有Page的话，就要读入下一个Page，
+				// 继续遍历。
+				if ((child==null || !child.hasNext()) && pgNo<numPages) {
+					child = ((HeapPage) pool.getPage(tid, new HeapPageId(tableID, pgNo++), Permissions.READ_ONLY)).iterator();
 				}
-				return it.hasNext();
+				return child!=null && child.hasNext(); // 短路操作，确保不会空指针异常。
 			}
 			
 			@Override
 			public void close() {
-				// TODO Auto-generated method stub
-				opened = false;
+				pgNo = -1;
 			}
 		};
     }

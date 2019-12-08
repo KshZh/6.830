@@ -4,7 +4,7 @@ import org.hamcrest.core.IsInstanceOf;
 
 /** Unique identifier for HeapPage objects. */
 public class HeapPageId implements PageId {
-	int tableId;
+	int tableID; // 存放该Page所属的Table/DbFile。
 	int pgNo;
 
     /**
@@ -16,14 +16,14 @@ public class HeapPageId implements PageId {
      */
     public HeapPageId(int tableId, int pgNo) {
         // some code goes here
-    	this.tableId = tableId;
+    	this.tableID = tableId;
     	this.pgNo = pgNo;
     }
 
     /** @return the table associated with this PageId */
     public int getTableId() {
         // some code goes here
-        return tableId;
+        return tableID;
     }
 
     /**
@@ -59,7 +59,7 @@ public class HeapPageId implements PageId {
     	if (o == null || !(o instanceof PageId))
     		return false;
         PageId pageId = (PageId)o;
-		return pageId.getTableId()==tableId && pageId.getPageNumber()==pgNo;
+		return pageId.getTableId()==tableID && pageId.getPageNumber()==pgNo;
     }
 
     /**

@@ -7,7 +7,7 @@ import java.io.Serializable;
  * specific table.
  */
 public class RecordId implements Serializable {
-	private PageId pId;
+	private PageId pageID;
 	private int tupleNo;
 
     private static final long serialVersionUID = 1L;
@@ -23,7 +23,7 @@ public class RecordId implements Serializable {
      */
     public RecordId(PageId pid, int tupleno) {
         // some code goes here
-    	this.pId = pid;
+    	this.pageID = pid;
     	this.tupleNo = tupleno;
     }
 
@@ -40,7 +40,7 @@ public class RecordId implements Serializable {
      */
     public PageId getPageId() {
         // some code goes here
-        return pId;
+        return pageID;
     }
 
     /**
@@ -56,7 +56,7 @@ public class RecordId implements Serializable {
         	return false;
         RecordId recordId = (RecordId)o;
         // 类类型比较内容相等一般调用equals()，而不用==。
-		return recordId.getPageId().equals(pId) && recordId.getTupleNumber()==tupleNo;
+		return recordId.getPageId().equals(pageID) && recordId.getTupleNumber()==tupleNo;
     }
 
     /**
@@ -68,7 +68,7 @@ public class RecordId implements Serializable {
     @Override
     public int hashCode() {
         // some code goes here
-    	return pId.getPageNumber()+tupleNo; // TODO，学习java中hashCode()的编写。
+    	return pageID.getPageNumber()+tupleNo; // TODO，学习java中hashCode()的编写。
     }
 
 }

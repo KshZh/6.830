@@ -457,11 +457,14 @@ DbFile是Page的集合，Page也是BufferPool缓存的单位。注意到开头�
       		return page;
       	}
       }
+  }
   ```
 
 ### 2.5. HeapFile access method
 
-BufferPool在内存中缓存Page，HeapFile是HeapPage的集合，HeapPage是tuple的集合，HeapPage首先有一个header，这是一个bitmap，故每一个tuple在HeapPage中占用的bit数为`tuple size * 8 + 1`。从磁盘中读写Page是由DbFile的readPage()负责的，其它对象读写Page都是通过BufferPool的getPage()来获取，getPage()如果缓存miss，则委托DbFile的readPage()从磁盘读入Page。
+Access methods provide a way to read or write data from disk that is arranged in a specific way. Common access methods include heap files (unsorted files of tuples) and B-trees; for this assignment, you will only implement a heap file access method, and we have written some of the code for you.
+
+BufferPool在内存中缓存Page，HeapFile是HeapPage的集合，HeapPage是tuple的集合，HeapPage首先有一个header，这是一个bitmap，故每一个tuple在HeapPage中占用的bit数为`tuple size * 8 + 1`。
 
 `_tuples per page_ = floor((_page size_ * 8) / (_tuple size_ * 8 + 1))`
 
@@ -479,7 +482,7 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
 
   ```java
   public class HeapPageId implements PageId {
-  	int tableId;
+  	int tableID; // 存放该Page所属的Table/DbFile。
   	int pgNo;
   }
   ```
@@ -490,7 +493,7 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
 
   ```java
   public class RecordId implements Serializable {
-  	private PageId pId;
+  	private PageId pageID;
   	private int tupleNo;
   }
   ```
@@ -533,22 +536,18 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
       }
       
       private int getNumTuples() {
-          // some code goes here
       	return (int) Math.floor(BufferPool.getPageSize()*8/(td.getSize()*8+1));
       }
       
-      private int getHeaderSize() {        
-          // some code goes here
+      private int getHeaderSize() {
           return (int) Math.ceil(numSlots/8.0); // XXX 注意这里要做浮点数除法，而不是整数除法，如果写成了整数除法，那么除非刚好整除，否则就会数组下标访问越界。
       }
       
       public boolean isSlotUsed(int i) {
-          // some code goes here
           return (header[i/8]&(1<<(i%8)))!=0;
       }
       
       public Iterator<Tuple> iterator() {
-          // some code goes here
           return new Iterator<Tuple>() {
           	int i = 0;
           	
@@ -569,8 +568,10 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
       }
   }
   ```
-
+  
   通过测试HeapPageReadTest。
+  
+  You may find it helpful to look at the other methods that have been provided in HeapPage or in `src/simpledb/HeapFileEncoder.java` to understand the layout of pages.
 
 **Exercise 5.**
 
@@ -578,83 +579,72 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
 
   ```java
   public class HeapFile implements DbFile {
-  	private File file;
+  	private File file; // 磁盘文件，真正存储数据的地方。
   	private TupleDesc tDesc;
   	private int numPages;
-  	private int tableId;
+  	private int tableID;
       
       public Page readPage(PageId pid) {
-          // some code goes here
       	byte[] buf = new byte[BufferPool.getPageSize()];
       	try {
   	    	RandomAccessFile iFile = new RandomAccessFile(file, "r");
   	    	iFile.seek(pid.getPageNumber()*BufferPool.getPageSize());
   	    	iFile.read(buf);
-  	    	if (tableId == 0)
-  	    		tableId = pid.getTableId();
+  	    	if (tableID == 0)
+  	    		tableID = pid.getTableId();
   	    	return new HeapPage((HeapPageId) pid, buf);
   		} catch (IOException e) {
-  			e.printStackTrace();
-  			return null; // TODO
+  			throw new RuntimeException(e);
   		}
       }
       
+      // see DbFile.java for javadocs
+  	// 这使得客户可以得到一个表/DbFile的迭代器，迭代表中的Tuple。
       public DbFileIterator iterator(TransactionId tid) {
-          // some code goes here
           return new DbFileIterator() {
-          	boolean opened = false;
-          	// boolean closed = false; // 这个closed是多余的，因为一个迭代器要么已开启，要么已关闭。
-          	int pgNo = 0;
-          	Iterator<Tuple> it = null;
+          	private final BufferPool pool = Database.getBufferPool();
+          	// private boolean opened = false; // 利用`pgNo>=0`这个不变量，可以用pgNo的负值作为open()和close()的标志。
+          	private int pgNo = -1;
+          	private Iterator<Tuple> child = null;
   			
   			@Override
   			public void rewind() throws DbException, TransactionAbortedException {
-  				// TODO Auto-generated method stub
   				pgNo = 0;
-  				it = null;
+  				child = null;
   			}
   			
   			@Override
   			public void open() throws DbException, TransactionAbortedException {
-  				// TODO Auto-generated method stub
-  				opened = true;
+  				pgNo = 0;
   			}
   			
   			@Override
   			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
-  				// TODO Auto-generated method stub
-  				// if (!opened || closed)
-                  if (!opened)
+  				if (pgNo<0 || !hasNext())
   					throw new NoSuchElementException();
-  				// 这里假定caller每次都会先检查hasNext()再调用next()，所以没有做更多的检查。
-  				return it.next();
+  				return child.next();
   			}
   			
   			@Override
   			public boolean hasNext() throws DbException, TransactionAbortedException {
-  				// TODO Auto-generated method stub
-  				// if (!opened || closed)
-                  if (!opened)
+  				if (pgNo<0 || pgNo>numPages)
   					return false;
-  				if (pgNo > numPages)
-  					return false;
-  				if (it == null)
-  					it = ((HeapPage) Database.getBufferPool().getPage(tid, new HeapPageId(tableId, pgNo), null)).iterator();
-  				if (!it.hasNext() && pgNo+1<numPages) { // XXX 注意pgNo是从0开始的，而numPages是Page数组大小。
-  					pgNo++;
-  					it = ((HeapPage) Database.getBufferPool().getPage(tid, new HeapPageId(tableId, pgNo), null)).iterator();
+  				// 这里要注意检查边界，客户会一直调用hasNext()直到返回False，甚至返回False后继续调用，我们无法保证客户的行为。
+  				// XXX 还要注意，`child==null`只会在迭代器最开始时成立一次（如果不rewind()的话），之后如果`!child.hasNext()`成立，
+  				// 也就是说这个Page的有效的（查header的bitmap）Tuple已经遍历完了，而且这时该DbFile还有Page的话，就要读入下一个Page，
+  				// 继续遍历。
+  				if ((child==null || !child.hasNext()) && pgNo<numPages) {
+  					child = ((HeapPage) pool.getPage(tid, new HeapPageId(tableID, pgNo++), Permissions.READ_ONLY)).iterator();
   				}
-  				return it.hasNext();
+  				return child!=null && child.hasNext(); // 短路操作，确保不会空指针异常。
   			}
   			
   			@Override
   			public void close() {
-  				// TODO Auto-generated method stub
-  				// closed = true;
-                  opened = false;
+  				pgNo = -1;
   			}
   		};
-    }
+      }
   }
   ```
   
@@ -662,9 +652,67 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
 
 ### 2.6. Operators
 
-**Operators are responsible for the actual execution of the query plan. They implement the operations of the relational algebra. In SimpleDB, operators are iterator based**; each operator implements the `DbIterator` interface.
+**Operators are responsible for the actual execution of the query plan. They implement the operations of the `relational algebra`. In SimpleDB, operators are iterator based; each operator implements the `DbIterator` interface.**
 
 **At the top of the plan, the program interacting with SimpleDB simply calls `getNext` on the root operator; this operator then calls `getNext` on its children, and so on, until these leaf operators are called. They fetch tuples from disk and pass them up the tree (as return arguments to `getNext`); tuples propagate up the plan in this way until they are output at the root or combined or rejected by another operator in the plan.**
+
+#### Interface:
+
+##### OpIterator
+
+```java
+/**
+ * OpIterator is the iterator interface that all SimpleDB operators should
+ * implement. If the iterator is not open, none of the methods should work,
+ * and should throw an IllegalStateException.  In addition to any
+ * resource allocation/deallocation, an open method should call any
+ * child iterator open methods, and in a close method, an iterator
+ * should call its children's close methods.
+ */
+public interface OpIterator extends Serializable{
+  /**
+   * Opens the iterator. This must be called before any of the other methods.
+   * @throws DbException when there are problems opening/accessing the database.
+   */
+  public void open()
+      throws DbException, TransactionAbortedException;
+
+  /** Returns true if the iterator has more tuples.
+   * @return true f the iterator has more tuples.
+   * @throws IllegalStateException If the iterator has not been opened
+ */
+  public boolean hasNext() throws DbException, TransactionAbortedException;
+
+  /**
+   * Returns the next tuple from the operator (typically implementing by reading
+   * from a child operator or an access method).
+   *
+   * @return the next tuple in the iteration.
+   * @throws NoSuchElementException if there are no more tuples.
+   * @throws IllegalStateException If the iterator has not been opened
+   */
+  public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException;
+
+  /**
+   * Resets the iterator to the start.
+   * @throws DbException when rewind is unsupported.
+   * @throws IllegalStateException If the iterator has not been opened
+   */
+  public void rewind() throws DbException, TransactionAbortedException;
+
+  /**
+   * Returns the TupleDesc associated with this OpIterator.
+   * @return the TupleDesc associated with this OpIterator.
+   */
+  public TupleDesc getTupleDesc();
+
+  /**
+   * Closes the iterator. When the iterator is closed, calling next(),
+   * hasNext(), or rewind() should fail by throwing IllegalStateException.
+   */
+  public void close();
+}
+```
 
 **Exercise 6.**
 
@@ -672,60 +720,51 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
 
   ```java
   public class SeqScan implements OpIterator {
-  	private TransactionId tId;
-  	private int tableId;
+  	private TransactionId tID;
+  	private int tableID;
   	private String tableAlias;
   	private DbFile dbFile;
-  	private DbFileIterator iterator;
+  	private DbFileIterator child;
       
       public void open() throws DbException, TransactionAbortedException {
-          // some code goes here
-      	dbFile = Database.getCatalog().getDatabaseFile(tableId);
-      	iterator = dbFile.iterator(tId);
-      	iterator.open();
+      	child.open();
       }
       
       public TupleDesc getTupleDesc() {
-          // some code goes here
-      	// 没有检查this.dbFile是否不为null，即caller是否先调用了open()。
           TupleDesc tupleDesc = dbFile.getTupleDesc();
           Type[] typeAr = new Type[tupleDesc.numFields()];
           String[] fieldAr = new String[tupleDesc.numFields()];
           for (int i = 0; i < tupleDesc.numFields(); i++) {
           	typeAr[i] = tupleDesc.getFieldType(i);
-  			fieldAr[i] = tableAlias + "." + tupleDesc.getFieldName(i);
+  			fieldAr[i] = tableAlias + "." + tupleDesc.getFieldName(i); // 给属性名加上表名前缀。
   		}
   		return new TupleDesc(typeAr, fieldAr);
       }
       
       public boolean hasNext() throws TransactionAbortedException, DbException {
-          // some code goes here
-      	if (dbFile==null || iterator==null)
+      	if (dbFile==null || child==null)
       		throw new IllegalStateException();
-          return iterator.hasNext();
+          return child.hasNext();
       }
   
       public Tuple next() throws NoSuchElementException,
               TransactionAbortedException, DbException {
-          // some code goes here
-      	if (dbFile==null || iterator==null)
+      	if (dbFile==null || child==null)
       		throw new IllegalStateException();
-          return iterator.next();
+          return child.next();
       }
   
       public void close() {
-          // some code goes here
-      	iterator.close();
+      	child.close();
       }
   
       public void rewind() throws DbException, NoSuchElementException,
               TransactionAbortedException {
-          // some code goes here
-      	iterator.rewind();
+      	child.rewind();
       }
   }
   ```
-
+  
   通过测试ScanTest。
 
 ### 2.7. A simple query
