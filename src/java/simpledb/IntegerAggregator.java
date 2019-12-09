@@ -13,11 +13,10 @@ import sun.font.GlyphLayout.GVData;
  * Knows how to compute some aggregate over a set of IntFields.
  */
 public class IntegerAggregator implements Aggregator {
-	private int gbField;
-	private Type gbFieldType;
-	private int aField;
+	private int gbFieldNo;
+	private int aFieldNo;
 	private Op op;
-	// HashMap uses equals() to compare the key whether the are equal or not. 如果是primitive type，如int，用==也可以。
+	// HashMap uses equals() to compare the key whether the are equal or not.
 	private HashMap<Field, Integer> resultOfGroups;
 	private HashMap<Field, Integer> numTuplePerGroup;
 	private TupleDesc tDesc;
@@ -41,9 +40,8 @@ public class IntegerAggregator implements Aggregator {
 
     public IntegerAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
         // some code goes here
-    	this.gbField = gbfield;
-    	this.gbFieldType = gbfieldtype;
-    	this.aField = afield;
+    	this.gbFieldNo = gbfield;
+    	this.aFieldNo = afield;
     	this.op = what;
     	this.resultOfGroups = new HashMap<Field, Integer>();
     	this.numTuplePerGroup = new HashMap<Field, Integer>();
@@ -63,8 +61,8 @@ public class IntegerAggregator implements Aggregator {
      */
     public void mergeTupleIntoGroup(Tuple tup) {
         // some code goes here
-    	Field gbFieldVal = gbField==NO_GROUPING? _DUMMY_FIELD: tup.getField(gbField);
-    	int aFieldVal = ((IntField)tup.getField(aField)).getValue();
+    	Field gbFieldVal = gbFieldNo==NO_GROUPING? _DUMMY_FIELD: tup.getField(gbFieldNo);
+    	int aFieldVal = ((IntField)tup.getField(aFieldNo)).getValue();
     	if (!numTuplePerGroup.containsKey(gbFieldVal)) {
     		numTuplePerGroup.put(gbFieldVal, 1);
     	} else {
@@ -138,6 +136,7 @@ public class IntegerAggregator implements Aggregator {
 				it = resultOfGroups.entrySet().iterator();
 			}
 			
+			/*
 			@Override
 			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
 				if (!opened) {
@@ -145,7 +144,7 @@ public class IntegerAggregator implements Aggregator {
 				}
 				Tuple tuple = new Tuple(tDesc);
 				Entry<Field, Integer> nextEntry = it.next(); // it.next()可能会抛出NoSuchElementException异常。
-				if (gbField == NO_GROUPING) {
+				if (gbFieldNo == NO_GROUPING) {
 					if (op == Op.AVG) {
 						tuple.setField(0, new IntField(nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey())));
 					} else {
@@ -158,6 +157,25 @@ public class IntegerAggregator implements Aggregator {
 					tuple.setField(1, new IntField(nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey())));
 				} else {
 					tuple.setField(1, new IntField(nextEntry.getValue()));
+				}
+				return tuple;
+			}
+			*/
+			
+			// 消除重复代码后，
+			@Override
+			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
+				if (!opened) {
+					throw new DbException("Must open() first OR have close().");
+				}
+				Tuple tuple = new Tuple(tDesc);
+				Entry<Field, Integer> nextEntry = it.next(); // it.next()可能会抛出NoSuchElementException异常。
+				int val = op==op.AVG? nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey()): nextEntry.getValue();
+				if (gbFieldNo == NO_GROUPING) {
+					tuple.setField(0, new IntField(val));
+				} else {
+					tuple.setField(0, nextEntry.getKey());
+					tuple.setField(1, new IntField(val));
 				}
 				return tuple;
 			}

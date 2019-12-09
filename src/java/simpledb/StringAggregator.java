@@ -13,9 +13,8 @@ import simpledb.Aggregator.Op;
  * Knows how to compute some aggregate over a set of StringFields.
  */
 public class StringAggregator implements Aggregator {
-	private int gbField;
-	private Type gbFieldType;
-	private int aField;
+	private int gbFieldNo;
+	private int aFieldNo;
 	private HashMap<Field, Integer> resultOfGroups;
 	private TupleDesc tDesc;
 
@@ -31,14 +30,12 @@ public class StringAggregator implements Aggregator {
      */
 
     public StringAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
-        // some code goes here
     	// StringAggregator只支持COUNT操作，因为其它聚合操作对StringField没有意义。
     	if (what != Op.COUNT) {
     		throw new IllegalArgumentException("Only COUNT");
     	}
-    	this.gbField = gbfield;
-    	this.gbFieldType = gbfieldtype;
-    	this.aField = afield;
+    	this.gbFieldNo = gbfield;
+    	this.aFieldNo = afield;
     	this.resultOfGroups = new HashMap<Field, Integer>();
     	if (gbfield == NO_GROUPING) {
     		tDesc = new TupleDesc(new Type[]{Type.INT_TYPE}, new String[]{"aggregateValue"});
@@ -53,7 +50,7 @@ public class StringAggregator implements Aggregator {
      */
     public void mergeTupleIntoGroup(Tuple tup) {
         // some code goes here
-    	Field gbFieldVal = gbField==NO_GROUPING? _DUMMY_FIELD: tup.getField(gbField);
+    	Field gbFieldVal = gbFieldNo==NO_GROUPING? _DUMMY_FIELD: tup.getField(gbFieldNo);
     	if (!resultOfGroups.containsKey(gbFieldVal)) {
     		resultOfGroups.put(gbFieldVal, 1);
     	} else {
@@ -93,7 +90,7 @@ public class StringAggregator implements Aggregator {
 				}
 				Tuple tuple = new Tuple(tDesc);
 				Entry<Field, Integer> nextEntry = it.next();
-				if (gbField == NO_GROUPING) {
+				if (gbFieldNo == NO_GROUPING) {
 					tuple.setField(0, new IntField(nextEntry.getValue()));
 				} else {
 					tuple.setField(0, nextEntry.getKey());

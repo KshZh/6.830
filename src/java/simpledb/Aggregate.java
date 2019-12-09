@@ -12,8 +12,8 @@ import simpledb.Aggregator.Op;
 public class Aggregate extends Operator {
 	private OpIterator childIterator;
 	private Aggregator aggregator;
-	private int gbField;
-	private int aField;
+	private int gbFieldNo;
+	private int aFieldNo;
 	private TupleDesc tDesc;
 	private Op op;
 
@@ -39,9 +39,8 @@ public class Aggregate extends Operator {
      */
     public Aggregate(OpIterator child, int afield, int gfield, Aggregator.Op aop) {
     	// some code goes here
-    	this.childIterator = child;
-    	this.gbField = gfield;
-    	this.aField = afield;
+    	this.gbFieldNo = gfield;
+    	this.aFieldNo = afield;
     	this.op = aop;
     	Type gType = null;
     	TupleDesc tDesc = child.getTupleDesc();
@@ -78,7 +77,7 @@ public class Aggregate extends Operator {
      * */
     public int groupField() {
     	// some code goes here
-    	return gbField;
+    	return gbFieldNo;
     }
 
     /**
@@ -88,7 +87,7 @@ public class Aggregate extends Operator {
      * */
     public String groupFieldName() {
     	// some code goes here
-    	if (gbField != -1) {
+    	if (gbFieldNo != aggregator.NO_GROUPING) {
     		return tDesc.getFieldName(0);
     	}
     	return null;
@@ -99,7 +98,7 @@ public class Aggregate extends Operator {
      * */
     public int aggregateField() {
     	// some code goes here
-    	return aField;
+    	return aFieldNo;
     }
 
     /**
@@ -188,6 +187,7 @@ public class Aggregate extends Operator {
 			while (child.hasNext()) {
 				this.aggregator.mergeTupleIntoGroup(child.next());
 			}
+			child.close();
 		} catch (DbException e) {
 			e.printStackTrace();
 		} catch (TransactionAbortedException e) {

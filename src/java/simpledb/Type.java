@@ -9,6 +9,10 @@ import java.io.*;
  * constructor is private.
  */
 public enum Type implements Serializable {
+    // XXX 类型，并不存储实际的数据。但类型可以负责解析属于该类型的数据/对象。
+	// 同样，每个Type要自己根据数据的组织方式实现parse()，这样给系统扩展新的Type时才不需要修改其它部分代码。
+    // XXX 在SimpleDB中，从语言层面上看，字段值Field对象的类型当然是Field，但从更高级的抽象层次看，字段值Field对象的类型是schema/TupleDesc中描述的字段类型/域，即Type。
+	// 具体地，IntField的类型是INT_TYPE，StringField的类型是STRING_TYPE。
     INT_TYPE() {
         @Override
         public int getLen() {

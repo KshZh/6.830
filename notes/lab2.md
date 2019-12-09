@@ -4,62 +4,6 @@ Note that SimpleDB does not implement any kind of consistency or integrity check
 
 Finally, you might notice that the iterators in this lab extend the Operator class instead of implementing the OpIterator interface. Because the implementation of next/hasNext is often repetitive, annoying, and error-prone, Operator implements this logic generically, and only requires that you implement a simpler readNext.
 
-迭代器模式：提供一种方法访问一个聚合对象中的各个元素，而又不需要暴露该对象的内部表示，且为遍历不同的聚合结构提供了一个统一的接口。
-
-```java
-/**
- * OpIterator is the iterator interface that all SimpleDB operators should
- * implement. If the iterator is not open, none of the methods should work,
- * and should throw an IllegalStateException.  In addition to any
- * resource allocation/deallocation, an open method should call any
- * child iterator open methods, and in a close method, an iterator
- * should call its children's close methods.
- */
-public interface OpIterator extends Serializable{
-  /**
-   * Opens the iterator. This must be called before any of the other methods.
-   * @throws DbException when there are problems opening/accessing the database.
-   */
-  public void open()
-      throws DbException, TransactionAbortedException;
-
-  /** Returns true if the iterator has more tuples.
-   * @return true f the iterator has more tuples.
-   * @throws IllegalStateException If the iterator has not been opened
- */
-  public boolean hasNext() throws DbException, TransactionAbortedException;
-
-  /**
-   * Returns the next tuple from the operator (typically implementing by reading
-   * from a child operator or an access method).
-   *
-   * @return the next tuple in the iteration.
-   * @throws NoSuchElementException if there are no more tuples.
-   * @throws IllegalStateException If the iterator has not been opened
-   */
-  public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException;
-
-  /**
-   * Resets the iterator to the start.
-   * @throws DbException when rewind is unsupported.
-   * @throws IllegalStateException If the iterator has not been opened
-   */
-  public void rewind() throws DbException, TransactionAbortedException;
-
-  /**
-   * Returns the TupleDesc associated with this OpIterator.
-   * @return the TupleDesc associated with this OpIterator.
-   */
-  public TupleDesc getTupleDesc();
-
-  /**
-   * Closes the iterator. When the iterator is closed, calling next(),
-   * hasNext(), or rewind() should fail by throwing IllegalStateException.
-   */
-  public void close();
-}
-```
-
 ```java
 // 提取了一个较为通用的迭代模式。
 // 当然，对于不满足这个迭代模式的operator，则要自己实现OpIterator接口。
@@ -124,14 +68,13 @@ public abstract class Operator implements OpIterator {
   	private Field operand;
       
       public boolean filter(Tuple t) {
-          // some code goes here
       	return t.getField(fieldNo).compare(op, operand); // 这里operand是作为第二个操作数。
       }
   }
   ```
-
-  通过测试PredicateTest。
-
+  
+通过测试PredicateTest。
+  
 - src/simpledb/JoinPredicate.java
 
   ```java
@@ -142,14 +85,13 @@ public abstract class Operator implements OpIterator {
   	private Op op;
       
       public boolean filter(Tuple t1, Tuple t2) {
-          // some code goes here
           return t1.getField(fieldNo1).compare(op, t2.getField(fieldNo2)); // 比较两个字段值，这是Field应该提供的，确实现有代码已经提供了，那么只需简单调用即可/把比较的工作委托下去即可。
       }
   }
   ```
-
-  通过测试JoinPredicateTest。
-
+  
+通过测试JoinPredicateTest。
+  
 - src/simpledb/Filter.java
 
   **约定的接口使得我们可以很容易给系统加入新的组件，而不需要改动现有代码。**可以看到，在SimpleDB中制定了OpIterator接口后，添加新的operator是很容易的，不需要改动任何现有代码，同理，制定了Field接口后，添加新的字段类型（如浮点数、时间戳等）也是不需要改动现有代码的，这样的例子在SimpleDB中随处可见。
@@ -163,7 +105,6 @@ public abstract class Operator implements OpIterator {
       
       public void open() throws DbException, NoSuchElementException,
               TransactionAbortedException {
-          // some code goes here
       	// 别忘了，Filter也是一个Operator，也是一个OpIterator。
       	// 这里要明确指出调用的是父类的open()，而不是子类的open()，后者会无限递归。
       	super.open();
@@ -172,9 +113,8 @@ public abstract class Operator implements OpIterator {
       
       protected Tuple fetchNext() throws NoSuchElementException,
               TransactionAbortedException, DbException {
-          // some code goes here
       	Tuple tuple;
-      	// 这就是接口的强大之处，约定的接口，约定的行为、输入输出，不需要知道具体类型，是SeqScan还是别的，无所谓，反正迭代这个可迭代对象可以得到Tuple就够了。约定的接口使得我们可以很容易给系统加入新的组件，而不需要改动现有代码。
+      	// 这就是接口的强大之处，约定的接口，约定的行为、输入输出，不需要知道具体类型、具体实现，是SeqScan还是别的，无所谓，反正知道迭代这个可迭代对象可以得到Tuple就够了。约定的接口使得我们可以很容易给系统加入新的组件，而不需要改动现有代码。
       	while (childIterator.hasNext()) {
       		tuple = childIterator.next();
       		if (predicate.filter(tuple)) {
@@ -185,7 +125,7 @@ public abstract class Operator implements OpIterator {
       }
   }
   ```
-
+  
   通过测试FilterTest和system test中的FilterTest。
 
 - src/simpledb/Join.java
@@ -249,7 +189,97 @@ public abstract class Operator implements OpIterator {
 
 ### 2.2. Aggregates
 
-注意StringAggregator和IntegerAggregator中的类型前缀，指的是要进行聚合的字段的类型，是StringField还是IntField，而group的字段的类型在两个类中都可以是StringField或IntField。
+注意StringAggregator和IntegerAggregator中的类型前缀，指的是要进行聚合的字段值的类型，是StringField还是IntField，而group by的字段的类型在两个类中都可以是StringField或IntField。这点可以从构造函数的参数看出：`IntegerAggregator(int gbfield, Type gbfieldtype, int afield, Op what)`。
+
+#### Interface:
+
+##### Aggregator
+
+```java
+/**
+ * The common interface for any class that can compute an aggregate over a
+ * list of Tuples.
+ */
+public interface Aggregator extends Serializable {
+    static final int NO_GROUPING = -1;
+
+    static final Field _DUMMY_FIELD = new StringField("", 0);
+    
+    /**
+     * SUM_COUNT and SC_AVG will
+     * only be used in lab7, you are not required
+     * to implement them until then.
+     * */
+    public enum Op implements Serializable {
+        MIN, MAX, SUM, AVG, COUNT,
+        /**
+         * SUM_COUNT: compute sum and count simultaneously, will be
+         * needed to compute distributed avg in lab7.
+         * */
+        SUM_COUNT,
+        /**
+         * SC_AVG: compute the avg of a set of SUM_COUNT tuples,
+         * will be used to compute distributed avg in lab7.
+         * */
+        SC_AVG;
+
+        /**
+         * Interface to access operations by a string containing an integer
+         * index for command-line convenience.
+         *
+         * @param s a string containing a valid integer Op index
+         */
+        public static Op getOp(String s) {
+            return getOp(Integer.parseInt(s));
+        }
+
+        /**
+         * Interface to access operations by integer value for command-line
+         * convenience.
+         *
+         * @param i a valid integer Op index
+         */
+        public static Op getOp(int i) {
+            return values()[i];
+        }
+        
+        public String toString()
+        {
+        	if (this==MIN)
+        		return "min";
+        	if (this==MAX)
+        		return "max";
+        	if (this==SUM)
+        		return "sum";
+        	if (this==SUM_COUNT)
+    			return "sum_count";
+        	if (this==AVG)
+        		return "avg";
+        	if (this==COUNT)
+        		return "count";
+        	if (this==SC_AVG)
+    			return "sc_avg";
+        	throw new IllegalStateException("impossible to reach here");
+        }
+    }
+
+    /**
+     * Merge a new tuple into the aggregate for a distinct group value;
+     * creates a new group aggregate result if the group value has not yet
+     * been encountered.
+     *
+     * @param tup the Tuple containing an aggregate field and a group-by field
+     */
+    public void mergeTupleIntoGroup(Tuple tup);
+
+    /**
+     * Create a OpIterator over group aggregate results.
+     * @see simpledb.TupleIterator for a possible helper
+     */
+    public OpIterator iterator();
+    
+}
+```
 
 **Exercise 2.**
 
@@ -272,33 +302,218 @@ public abstract class Operator implements OpIterator {
   private HashMap<Field, Integer> numTuplePerGroup;
   // 而且代码又少了一些分支，更简洁。
   
-  // 定义在接口Aggregator中，注意确保_DUMMY_FIELD的值不会被用户用到。
+  // 定义在接口Aggregator中，注意确保_DUMMY_FIELD的值不会被客户用到。
   static final Field _DUMMY_FIELD = new StringField("", 0);
   ```
 
+  ```java
+  /**
+   * Knows how to compute some aggregate over a set of IntFields.
+   */
+  public class IntegerAggregator implements Aggregator {
+  	private int gbFieldNo;
+  	private int aFieldNo;
+  	private Op op;
+  	// HashMap uses equals() to compare the key whether the are equal or not.
+  	private HashMap<Field, Integer> resultOfGroups;
+  	private HashMap<Field, Integer> numTuplePerGroup;
+  	private TupleDesc tDesc;
+      
+      public IntegerAggregator(int gbfield, Type gbfieldtype, int afield, Op what) {
+      	this.gbFieldNo = gbfield;
+      	this.aFieldNo = afield;
+      	this.op = what;
+      	this.resultOfGroups = new HashMap<Field, Integer>();
+      	this.numTuplePerGroup = new HashMap<Field, Integer>();
+      	if (gbfield == NO_GROUPING) {
+      		tDesc = new TupleDesc(new Type[]{Type.INT_TYPE}, new String[]{"aggregateValue"});
+      	} else {
+      		tDesc = new TupleDesc(new Type[]{gbfieldtype, Type.INT_TYPE}, new String[]{"groupValue", "aggregateValue"});
+      	}
+      }
+      
+      /**
+       * Merge a new tuple into the aggregate, grouping as indicated in the
+       * constructor
+       * 
+       * @param tup
+       *            the Tuple containing an aggregate field and a group-by field
+       */
+      public void mergeTupleIntoGroup(Tuple tup) {
+      	Field gbFieldVal = gbFieldNo==NO_GROUPING? _DUMMY_FIELD: tup.getField(gbFieldNo);
+      	int aFieldVal = ((IntField)tup.getField(aFieldNo)).getValue();
+      	if (!numTuplePerGroup.containsKey(gbFieldVal)) {
+      		numTuplePerGroup.put(gbFieldVal, 1);
+      	} else {
+      		numTuplePerGroup.replace(gbFieldVal, numTuplePerGroup.get(gbFieldVal)+1);
+      	}
+  //    	if (!resultOfGroups.containsKey(gbFieldVal)) {
+  //    		resultOfGroups.put(gbFieldVal, 0);
+  //    	}
+  		Integer oldA = resultOfGroups.get(gbFieldVal);
+      	switch (op) {
+  		case MIN:
+  			if (oldA == null) {
+  				resultOfGroups.put(gbFieldVal, aFieldVal);
+  			} else if (aFieldVal<oldA) {
+  				resultOfGroups.replace(gbFieldVal, aFieldVal);
+  			}
+  			// 错误！如果一个已存在的key的最小值就是0呢?
+  //			if (oldA==0 || aFieldVal<oldA) {
+  //				resultOfGroups.replace(gbFieldVal, aFieldVal);
+  //			}
+  			break;
+  		case MAX:
+  			if (oldA == null) {
+  				resultOfGroups.put(gbFieldVal, aFieldVal);
+  			} else if (aFieldVal>oldA) {
+  				resultOfGroups.replace(gbFieldVal, aFieldVal);
+  			}
+  			break;
+  		case SUM:
+  		case AVG:
+  			if (oldA == null) {
+  				resultOfGroups.put(gbFieldVal, aFieldVal);
+  			} else {
+  				resultOfGroups.replace(gbFieldVal, oldA+aFieldVal);
+  			}
+  			break;
+  		case COUNT:
+  			if (oldA == null) {
+  				resultOfGroups.put(gbFieldVal, 1);
+  			} else {
+  				resultOfGroups.replace(gbFieldVal, oldA+1);
+  			}
+  			break;
+  		default:
+  			break;
+  		}
+      }
+      
+      /**
+       * Create a OpIterator over group aggregate results.
+       * 
+       * @return a OpIterator whose tuples are the pair (groupVal, aggregateVal)
+       *         if using group, or a single (aggregateVal) if no grouping. The
+       *         aggregateVal is determined by the type of aggregate specified in
+       *         the constructor.
+       */
+      public OpIterator iterator() {
+      	return new OpIterator() {
+      		private boolean opened = false;
+      		private Iterator<Entry<Field, Integer>> it;
+  			
+  			@Override
+  			public void rewind() throws DbException, TransactionAbortedException {
+  				it = resultOfGroups.entrySet().iterator();
+  			}
+  			
+  			@Override
+  			public void open() throws DbException, TransactionAbortedException {
+  				opened = true;
+  				it = resultOfGroups.entrySet().iterator();
+  			}
+  			
+  			/*
+  			@Override
+  			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
+  				if (!opened) {
+  					throw new DbException("Must open() first OR have close().");
+  				}
+  				Tuple tuple = new Tuple(tDesc);
+  				Entry<Field, Integer> nextEntry = it.next(); // it.next()可能会抛出NoSuchElementException异常。
+  				if (gbFieldNo == NO_GROUPING) {
+  					if (op == Op.AVG) {
+  						tuple.setField(0, new IntField(nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey())));
+  					} else {
+  						tuple.setField(0, new IntField(nextEntry.getValue()));
+  					}
+  					return tuple;
+  				}
+  				tuple.setField(0, nextEntry.getKey()); // 只有一个StringField/IntField的实例对象，因为只读不可写，所以没问题。
+  				if (op == Op.AVG) {
+  					tuple.setField(1, new IntField(nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey())));
+  				} else {
+  					tuple.setField(1, new IntField(nextEntry.getValue()));
+  				}
+  				return tuple;
+  			}
+  			*/
+  			
+  			// 消除重复代码后，
+  			@Override
+  			public Tuple next() throws DbException, TransactionAbortedException, NoSuchElementException {
+  				if (!opened) {
+  					throw new DbException("Must open() first OR have close().");
+  				}
+  				Tuple tuple = new Tuple(tDesc);
+  				Entry<Field, Integer> nextEntry = it.next(); // it.next()可能会抛出NoSuchElementException异常。
+  				int val = op==op.AVG? nextEntry.getValue()/numTuplePerGroup.get(nextEntry.getKey()): nextEntry.getValue();
+  				if (gbFieldNo == NO_GROUPING) {
+  					tuple.setField(0, new IntField(val));
+  				} else {
+  					tuple.setField(0, nextEntry.getKey());
+  					tuple.setField(1, new IntField(val));
+  				}
+  				return tuple;
+  			}
+  			
+  			@Override
+  			public boolean hasNext() throws DbException, TransactionAbortedException {
+  				if (!opened) {
+  					throw new DbException("Must open() first OR have close().");
+  				}
+  				return it.hasNext();
+  			}
+  			
+  			@Override
+  			public TupleDesc getTupleDesc() {
+  				return tDesc;
+  			}
+  			
+  			@Override
+  			public void close() {
+  				opened = false;
+  			}
+  		};
+      }
+  
+  }
+  ```
+
+  通过测试IntegerAggregatorTest。
+
 - src/simpledb/StringAggregator.java
+
+  类似于IntegerAggregator，只不过StringAggregator只支持COUNT操作，因为其它聚合操作对StringField没有意义。
+
+  通过测试StringAggregatorTest。
 
 - src/simpledb/Aggregate.java
 
   ```java
+  /**
+   * The Aggregation operator that computes an aggregate (e.g., sum, avg, max,
+   * min). Note that we only support aggregates over a single column, grouped by a
+   * single column.
+   */
   public class Aggregate extends Operator {
   	private OpIterator childIterator;
   	private Aggregator aggregator;
-  	private int gbField;
-  	private int aField;
+  	private int gbFieldNo;
+  	private int aFieldNo;
   	private TupleDesc tDesc;
   	private Op op;
       
       public Aggregate(OpIterator child, int afield, int gfield, Aggregator.Op aop) {
       	// some code goes here
-      	this.childIterator = child;
-      	this.gbField = gfield;
-      	this.aField = afield;
+      	this.gbFieldNo = gfield;
+      	this.aFieldNo = afield;
       	this.op = aop;
       	Type gType = null;
       	TupleDesc tDesc = child.getTupleDesc();
       	Type aType = tDesc.getFieldType(afield);
-      	if (gfield != -1) {
+      	if (gfield != Aggregator.NO_GROUPING) {
           	gType = tDesc.getFieldType(gfield);
           	this.tDesc = new TupleDesc(new Type[]{gType, aType}, new String[]{tDesc.getFieldName(gfield), tDesc.getFieldName(afield)});
       	} else {
@@ -314,6 +529,7 @@ public abstract class Operator implements OpIterator {
   			while (child.hasNext()) {
   				this.aggregator.mergeTupleIntoGroup(child.next());
   			}
+  			child.close();
   		} catch (DbException e) {
   			e.printStackTrace();
   		} catch (TransactionAbortedException e) {
@@ -329,8 +545,176 @@ public abstract class Operator implements OpIterator {
       	}
   		return null;
       }
+      
+      @Override
+      public void setChildren(OpIterator[] children) {
+      	// some code goes here
+      	// TODO 这里有bug，必须先把this.aggregator清空，否则就叠加上去了。
+      	OpIterator child = children[0];
+      	try {
+      		child.open();
+  			while (child.hasNext()) {
+  				this.aggregator.mergeTupleIntoGroup(child.next());
+  			}
+  			child.close();
+  		} catch (DbException e) {
+  			e.printStackTrace();
+  		} catch (TransactionAbortedException e) {
+  			e.printStackTrace();
+  		}
+      	this.childIterator = this.aggregator.iterator();
+      }
   }
   ```
+  
+  通过测试AggregateTest和system test中的AggregateTest。
 
 ### 2.3. HeapFile Mutability
 
+**Exercise 3.**
+
+- src/simpledb/HeapPage.java
+
+  ```java
+  /**
+   * Delete the specified tuple from the page; the corresponding header bit should be updated to reflect
+   *   that it is no longer stored on any page.
+   * @throws DbException if this tuple is not on this page, or tuple slot is
+   *         already empty.
+   * @param t The tuple to delete
+   */
+  public void deleteTuple(Tuple t) throws DbException {
+      // some code goes here
+      // not necessary for lab1
+  	int tupleNo = t.getRecordId().getTupleNumber();
+  	if (t.getRecordId().getPageId()!=pid || tupleNo >= numSlots || !isSlotUsed(tupleNo)) {
+  		throw new DbException("Tuple is not on this page, or tuple slot is already empty.");
+  	}
+  	markSlotUsed(tupleNo, false); // 只需要标记一下bitmap即可，不需要把对应的slot清零。
+  }
+  
+  /**
+   * Adds the specified tuple to the page;  the tuple should be updated to reflect
+   *  that it is now stored on this page.
+   * @throws DbException if the page is full (no empty slots) or tupledesc
+   *         is mismatch.
+   * @param t The tuple to add.
+   */
+  public void insertTuple(Tuple t) throws DbException {
+      // some code goes here
+      // not necessary for lab1
+  	for (int i = 0; i < numSlots; i++) { // 不要用`i<header.length*8`，因为header的末尾几个位可能没被使用但却为0。
+  		if (!isSlotUsed(i)) {
+  			tuples[i] = t;
+  			t.setRecordId(new RecordId(pid, i));
+  			markSlotUsed(i, true);
+  			return;
+  		}
+  	}
+  	throw new DbException("The page is full.");
+  }
+  
+  /**
+   * Marks this page as dirty/not dirty and record that transaction
+   * that did the dirtying
+   */
+  public void markDirty(boolean dirty, TransactionId tid) {
+      // some code goes here
+  	// not necessary for lab1
+      // dirty = dirty; // XXX 成员变量与形参重名，必须使用this，否则就变成了两边都是引用的是形参。
+  	this.dirty = dirty;
+  	if (dirty) {
+  		lastDirtiedThePage = tid;
+  	} else {
+  		lastDirtiedThePage = null;
+  	}
+  }
+  
+  /**
+   * Returns the tid of the transaction that last dirtied this page, or null if the page is not dirty
+   */
+  public TransactionId isDirty() {
+      // some code goes here
+  	// Not necessary for lab1
+      return lastDirtiedThePage;      
+  }
+  
+  /**
+   * Returns the number of empty slots on this page.
+   */
+  public int getNumEmptySlots() {
+      // some code goes here
+  	// 检查bitmap即可。
+  	int n = 0, i;
+  	for (i = 0; i < numSlots; i++) {
+  		if ((header[i/8]&(1<<(i%8))) == 0) {
+  			n++;
+  		}
+  	}
+      return n;
+  }
+  
+  /**
+   * Returns true if associated slot on this page is filled.
+   */
+  public boolean isSlotUsed(int i) {
+      // some code goes here
+      return (header[i/8]&(1<<(i%8)))!=0;
+  }
+  
+  /**
+   * Abstraction to fill or clear a slot on this page.
+   */
+  private void markSlotUsed(int i, boolean value) {
+      // some code goes here
+      // not necessary for lab1
+  	if (value) {
+  		header[i/8] |= (1<<(i%8));
+  	} else {
+  		header[i/8] &= ~(1<<(i%8));
+  	}
+  }
+  ```
+
+  通过测试HeapPageWriteTest。
+
+- src/simpledb/HeapFile.java
+  (Note that you do not necessarily need to implement writePage at this point).
+
+  ```java
+  // see DbFile.java for javadocs
+  public ArrayList<Page> insertTuple(TransactionId tid, Tuple t)
+          throws DbException, IOException, TransactionAbortedException {
+      // some code goes here
+  	BufferPool bufferPool = Database.getBufferPool();
+  	ArrayList<Page> arrayList = new ArrayList<Page>();
+  	for (int i = 0; i < numPages; i++) {
+  		HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, i), null);
+  		if (page.getNumEmptySlots() != 0) {
+  			page.insertTuple(t);
+  			arrayList.add(page);
+  			return arrayList;
+  		}
+  	}
+  	HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, numPages++), null);
+  	page.insertTuple(t);
+  	arrayList.add(page);
+  	return arrayList;
+  }
+  
+  // see DbFile.java for javadocs
+  public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t) throws DbException,
+          TransactionAbortedException {
+      // some code goes here
+  	BufferPool bufferPool = Database.getBufferPool();
+  	HeapPage page = (HeapPage)bufferPool.getPage(tid, t.getRecordId().getPageId(), null);
+  	page.deleteTuple(t);
+  	ArrayList<Page> arrayList = new ArrayList<Page>();
+  	arrayList.add(page);
+      return arrayList;
+  }
+  ```
+
+  通过测试HeapFileWriteTest。
+
+- 

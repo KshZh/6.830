@@ -181,7 +181,7 @@ public class HeapPage implements Page {
             if (!isSlotUsed(i)) {
                 for (int j=0; j<td.getSize(); j++) {
                     try {
-                        dos.writeByte(0);
+                        dos.writeByte(0); // 填充0。
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -194,7 +194,7 @@ public class HeapPage implements Page {
             for (int j=0; j<td.numFields(); j++) {
                 Field f = tuples[i].getField(j);
                 try {
-                    f.serialize(dos); // XXX 分派，让特定类型的Field根据自己的类型把自己的数据序列化到dos中，这降低了caller的复杂度。
+                    f.serialize(dos); // XXX
                 
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -248,7 +248,7 @@ public class HeapPage implements Page {
     	if (t.getRecordId().getPageId()!=pid || tupleNo >= numSlots || !isSlotUsed(tupleNo)) {
     		throw new DbException("Tuple is not on this page, or tuple slot is already empty.");
     	}
-    	markSlotUsed(tupleNo, false);
+    	markSlotUsed(tupleNo, false); // 只需要标记一下bitmap即可，不需要把对应的slot清零。
     }
 
     /**
@@ -279,7 +279,8 @@ public class HeapPage implements Page {
     public void markDirty(boolean dirty, TransactionId tid) {
         // some code goes here
     	// not necessary for lab1
-    	dirty = dirty;
+    	// dirty = dirty; // XXX 成员变量与形参重名，必须使用this，否则就变成了两边都是引用的是形参。
+    	this.dirty = dirty;
     	if (dirty) {
     		lastDirtiedThePage = tid;
     	} else {
