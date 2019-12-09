@@ -34,15 +34,25 @@ public class BufferPoolWriteTest extends TestUtil.CreateHeapFile {
     			throws DbException, IOException, TransactionAbortedException {
     		ArrayList<Page> dirtypages = new ArrayList<Page>();
     		for(int i = 0; i < duplicates; i++) {
+    			/*
     			// create a blank page
     			BufferedOutputStream bw = new BufferedOutputStream(new FileOutputStream(super.getFile(), true));
                 byte[] emptyData = HeapPage.createEmptyPageData();
                 bw.write(emptyData);
                 bw.close();
+                */
+    			// 因为Utility.createEmptyHeapFile()创建的是一个带有一个空Page的HeapFile，所以如果上面的语句先执行，那么下面的Tuple t就会插入第二个Page中，
+    			// 从而导致外部handleManyDirtyPages()后面的检查失败。
+    			// TODO
     			HeapPage p = new HeapPage(new HeapPageId(super.getId(), super.numPages() - 1), 
     					HeapPage.createEmptyPageData());
     	        p.insertTuple(t);
     			dirtypages.add(p);
+    			// create a blank page
+    			BufferedOutputStream bw = new BufferedOutputStream(new FileOutputStream(super.getFile(), true));
+                byte[] emptyData = HeapPage.createEmptyPageData();
+                bw.write(emptyData);
+                bw.close();
     		}
     		return dirtypages;
     	}

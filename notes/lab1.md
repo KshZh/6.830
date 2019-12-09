@@ -754,17 +754,15 @@ Also, note that the high-order bits of the last byte may not correspond to a slo
   public class HeapFile implements DbFile {
   	private File file; // 磁盘文件，真正存储数据的地方。
   	private TupleDesc tDesc;
-  	private int numPages;
+  	// private int numPages; // XXX 不缓存，因为如果缓存的话，当file增大时，就必须同步更新numPages，否则就不一致了，程序就会出错。当这种同步更新不容易做到时，就在线计算，不要缓存。
   	private int tableID;
       
       public Page readPage(PageId pid) {
       	byte[] buf = new byte[BufferPool.getPageSize()];
       	try {
-  	    	RandomAccessFile iFile = new RandomAccessFile(file, "r");
-  	    	iFile.seek(pid.getPageNumber()*BufferPool.getPageSize());
-  	    	iFile.read(buf);
-  	    	if (tableID == 0)
-  	    		tableID = pid.getTableId();
+  	    	RandomAccessFile raf = new RandomAccessFile(file, "r");
+  	    	raf.seek(pid.getPageNumber()*BufferPool.getPageSize());
+  	    	raf.read(buf);
   	    	return new HeapPage((HeapPageId) pid, buf);
   		} catch (IOException e) {
   			throw new RuntimeException(e);

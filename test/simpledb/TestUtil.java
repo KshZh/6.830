@@ -392,6 +392,7 @@ public class TestUtil {
         }
 
         protected HeapFile empty;
-        private final File emptyFile;
+        // private final File emptyFile;
+        protected final File emptyFile;
     }
 }

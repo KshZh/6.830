@@ -80,6 +80,8 @@ public class BufferPool {
     	} else { // cache miss.
     		DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
     		// XXX 面向接口编程，即使我还没实现DbFile.readPage()，但我知道它的行为、它的输入输出(不需要关心具体实现，如怎么定位到指定的Page，而且不同的具体类型实现也不同)，那么我就可以直接编写出这部分代码。
+    		// TODO，如果pid不存在怎么办?
+    		// 一个办法是dbFile.readPage()抛出异常，然后这里捕获异常，创建Page，写入DbFile中，并放在内存中。
     		Page page = dbFile.readPage(pid);
     		pages.put(pid, page);
     		return page;
@@ -152,6 +154,7 @@ public class BufferPool {
     	ArrayList<Page> list = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
     	for (Page page: list) {
     		page.markDirty(true, tid);
+    		// pages.put(page.getId(), page);
     	}
     }
 

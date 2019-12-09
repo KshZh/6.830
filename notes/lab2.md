@@ -696,10 +696,15 @@ public interface Aggregator extends Serializable {
   			return arrayList;
   		}
   	}
-  	HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, numPages++), null);
-  	page.insertTuple(t);
-  	arrayList.add(page);
-  	return arrayList;
+      // 新建一个Page，并写入file中。
+      // 这里似乎不能从BufferPool获取，因为其也是调用DbFile的readPage()来载入相应的Page，但如果DbFile的File中不存在这个Page的话，可能就越界了。
+      // TODO，这个实现有点问题，查看BufferPoolWriteTest。
+      // HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, numPages()), null);
+      HeapPage page = new HeapPage(new HeapPageId(tableID, numPages()), HeapPage.createEmptyPageData());
+      page.insertTuple(t);
+      arrayList.add(page);
+      writePage(page);
+      return arrayList;
   }
   
   // see DbFile.java for javadocs
@@ -713,8 +718,51 @@ public interface Aggregator extends Serializable {
   	arrayList.add(page);
       return arrayList;
   }
+  
+  // see DbFile.java for javadocs
+  public void writePage(Page page) throws IOException {
+      // some code goes here
+      // not necessary for lab1
+  	int pgNo = page.getId().getPageNumber();
+  	if (pgNo>=0 && pgNo<=numPages()) {
+  		RandomAccessFile raf = new RandomAccessFile(file, "rw");
+  		raf.seek(BufferPool.getPageSize()*numPages());
+  		raf.write(page.getPageData(), 0, BufferPool.getPageSize());
+  		raf.close();
+  	} else {
+      	throw new IllegalArgumentException("PageNo out of range");	
+  	}
+  }
   ```
 
   通过测试HeapFileWriteTest。
 
-- 
+- src/simpledb/BufferPool.java
+
+  ```java
+  public void insertTuple(TransactionId tid, int tableId, Tuple t)
+      throws DbException, IOException, TransactionAbortedException {
+      // some code goes here
+      // not necessary for lab1
+      ArrayList<Page> list = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
+      for (Page page: list) {
+          page.markDirty(true, tid);
+  		pages.put(page.getId(), page); // TODO，这一句要加上，按理说是不用加的。这与前面insertTuple.insertTuple()有关。
+      }
+  }
+  
+  public  void deleteTuple(TransactionId tid, Tuple t)
+      throws DbException, IOException, TransactionAbortedException {
+      // some code goes here
+      // not necessary for lab1
+      ArrayList<Page> list = Database.getCatalog().getDatabaseFile(t.getRecordId().getPageId().getTableId()).deleteTuple(tid, t);
+      for (Page page: list) {
+          page.markDirty(true, tid);
+      }
+  }
+  ```
+
+  通过测试BufferPoolWriteTest，这个测试有个坑，TODO。
+
+### 2.4. Insertion and deletion
+
