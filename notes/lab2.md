@@ -73,8 +73,9 @@ public abstract class Operator implements OpIterator {
   }
   ```
   
+
 通过测试PredicateTest。
-  
+
 - src/simpledb/JoinPredicate.java
 
   ```java
@@ -90,8 +91,9 @@ public abstract class Operator implements OpIterator {
   }
   ```
   
+
 通过测试JoinPredicateTest。
-  
+
 - src/simpledb/Filter.java
 
   **约定的接口使得我们可以很容易给系统加入新的组件，而不需要改动现有代码。**可以看到，在SimpleDB中制定了OpIterator接口后，添加新的operator是很容易的，不需要改动任何现有代码，同理，制定了Field接口后，添加新的字段类型（如浮点数、时间戳等）也是不需要改动现有代码的，这样的例子在SimpleDB中随处可见。
@@ -698,7 +700,6 @@ public interface Aggregator extends Serializable {
   	}
       // 新建一个Page，并写入file中。
       // 这里似乎不能从BufferPool获取，因为其也是调用DbFile的readPage()来载入相应的Page，但如果DbFile的File中不存在这个Page的话，可能就越界了。
-      // TODO，这个实现有点问题，查看BufferPoolWriteTest。
       // HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, numPages()), null);
       HeapPage page = new HeapPage(new HeapPageId(tableID, numPages()), HeapPage.createEmptyPageData());
       page.insertTuple(t);
@@ -734,9 +735,9 @@ public interface Aggregator extends Serializable {
   	}
   }
   ```
-
-  通过测试HeapFileWriteTest。
-
+  
+通过测试HeapFileWriteTest。
+  
 - src/simpledb/BufferPool.java
 
   ```java
@@ -747,7 +748,7 @@ public interface Aggregator extends Serializable {
       ArrayList<Page> list = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
       for (Page page: list) {
           page.markDirty(true, tid);
-  		pages.put(page.getId(), page); // TODO，这一句要加上，按理说是不用加的。这与前面insertTuple.insertTuple()有关。
+  		pages.put(page.getId(), page);
       }
   }
   
@@ -765,4 +766,100 @@ public interface Aggregator extends Serializable {
   通过测试BufferPoolWriteTest，这个测试有个坑，TODO。
 
 ### 2.4. Insertion and deletion
+
+**Exercise 4.**
+
+- src/simpledb/Insert.java
+
+  ```java
+  /**
+   * Inserts tuples read from the child operator into the tableId specified in the
+   * constructor
+   */
+  public class Insert extends Operator {
+  	private DbFile table;
+  	private OpIterator child;
+  	private TransactionId tID;
+  	private TupleDesc tDesc;
+  	private boolean fetchNextCalled;
+      
+      public Insert(TransactionId t, OpIterator child, int tableId)
+              throws DbException {
+          // some code goes here
+      	this.table = Database.getCatalog().getDatabaseFile(tableId);
+      	if (!table.getTupleDesc().equals(child.getTupleDesc()))
+      		throw new DbException("TupleDesc of child differs from table into which we are to insert.");
+      	this.child = child;
+      	this.tID = t;
+      	this.tDesc = new TupleDesc(new Type[]{Type.INT_TYPE});
+  		this.fetchNextCalled = false;
+      }
+      
+      protected Tuple fetchNext() throws TransactionAbortedException, DbException {
+          // some code goes here
+          if (fetchNextCalled)
+          	return null;
+          Tuple tuple = new Tuple(tDesc);
+          BufferPool bufferPool = Database.getBufferPool();
+          int count = 0;
+          while (child.hasNext()) {
+  			try {
+  				bufferPool.insertTuple(tID, table.getId(), child.next());
+  			} catch (NoSuchElementException | IOException e) {
+  				e.printStackTrace();
+  				throw new DbException("BufferPool.insertTuple() fails.");
+  			}
+  			count++;
+          }
+          tuple.setField(0, new IntField(count));
+          fetchNextCalled = true;
+          return tuple;
+      }
+  }
+  ```
+
+  通过测试InsertTest和同名system test。
+
+- src/simpledb/Delete.java
+
+  ```java
+  /**
+   * The delete operator. Delete reads tuples from its child operator and removes
+   * them from the table they belong to.
+   */
+  public class Delete extends Operator {
+  	private OpIterator child;
+  	private TransactionId tID;
+  	private TupleDesc tDesc;
+  	private boolean fetchNextCalled;
+      
+      protected Tuple fetchNext() throws TransactionAbortedException, DbException {
+          // some code goes here
+      	if (fetchNextCalled)
+      		return null;
+      	Tuple tuple = new Tuple(tDesc);
+      	BufferPool bufferPool = Database.getBufferPool();
+      	int count = 0;
+      	while (child.hasNext()) {
+      		try {
+  				bufferPool.deleteTuple(tID, child.next());
+  			} catch (NoSuchElementException | IOException e) {
+  				// TODO Auto-generated catch block
+  				e.printStackTrace();
+  				throw new DbException("BufferPool.deleteTuple() fails.");
+  			}
+      		count++;
+      	}
+      	tuple.setField(0, new IntField(count));
+      	fetchNextCalled = true;
+  		return tuple;
+      }
+  }
+  ```
+
+  通过system test。
+
+### 2.5. Page eviction
+
+**Exercise 5.**
 

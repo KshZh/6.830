@@ -123,8 +123,7 @@ public class HeapFile implements DbFile {
 		}
     	// 新建一个Page，并写入file中。
     	// 这里似乎不能从BufferPool获取，因为其也是调用DbFile的readPage()来载入相应的Page，但如果DbFile的File中不存在这个Page的话，可能就越界了。
-    	// TODO
-    	// HeapPage page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableID, numPages()), null);
+    	// HeapPage page = (HeapPage) bufferPool.getPage(tableID, new HeapPageId(tid, numPages()), null);
     	HeapPage page = new HeapPage(new HeapPageId(tableID, numPages()), HeapPage.createEmptyPageData());
     	page.insertTuple(t);
 		arrayList.add(page);
