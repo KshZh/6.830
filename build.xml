@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="GBK"?> <!-- 这里从UTF-8改为GBK -->
 <project name="simpledb" default="dist" basedir=".">
     <property name="src" location="src"/>
     <property name="testd" location="test"/>

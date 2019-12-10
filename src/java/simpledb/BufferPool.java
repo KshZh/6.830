@@ -3,7 +3,10 @@ package simpledb;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
+import java.util.Map;
 
 /**
  * BufferPool manages the reading and writing of pages into memory from
@@ -18,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class BufferPool {
 	private int numPages;
-	private HashMap<PageId, Page> pages;
+	private LRUCache cache;
 	
     /** Bytes per page, including header. */
     private static final int DEFAULT_PAGE_SIZE = 4096;
@@ -38,7 +41,7 @@ public class BufferPool {
     public BufferPool(int numPages) {
         // some code goes here
     	this.numPages = numPages;
-    	this.pages = new HashMap<PageId, Page>();
+    	this.cache = new LRUCache(numPages);
     }
     
     public static int getPageSize() {
@@ -73,15 +76,15 @@ public class BufferPool {
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
         // some code goes here
-    	if (pages.size() > numPages)
+    	if (cache.size() > numPages)
     		throw new DbException(null);
-    	if (pages.containsKey(pid)) { // cache hit.
-    		return pages.get(pid);
+    	if (cache.containsKey(pid)) { // cache hit.
+    		return cache.get(pid);
     	} else { // cache miss.
     		DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
     		// XXX 面向接口编程，即使我还没实现DbFile.readPage()，但我知道它的行为、它的输入输出(不需要关心具体实现，如怎么定位到指定的Page，而且不同的具体类型实现也不同)，那么我就可以直接编写出这部分代码。
     		Page page = dbFile.readPage(pid);
-    		pages.put(pid, page);
+    		cache.put(pid, page);
     		return page;
     	}
     }
@@ -152,7 +155,7 @@ public class BufferPool {
     	ArrayList<Page> list = Database.getCatalog().getDatabaseFile(tableId).insertTuple(tid, t);
     	for (Page page: list) {
     		page.markDirty(true, tid);
-    		pages.put(page.getId(), page);
+    		cache.put(page.getId(), page);
     	}
     }
 
@@ -187,7 +190,10 @@ public class BufferPool {
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
         // not necessary for lab1
-
+    	for (Map.Entry<PageId, Page> entry: cache.entrySet()) {
+    		if (entry.getValue().isDirty() != null)
+    			flushPage(entry.getKey());
+    	}
     }
 
     /** Remove the specific page id from the buffer pool.
@@ -201,6 +207,7 @@ public class BufferPool {
     public synchronized void discardPage(PageId pid) {
         // some code goes here
         // not necessary for lab1
+    	cache.remove(pid);
     }
 
     /**
@@ -210,6 +217,7 @@ public class BufferPool {
     private synchronized  void flushPage(PageId pid) throws IOException {
         // some code goes here
         // not necessary for lab1
+    	Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(cache.get(pid));
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -217,6 +225,11 @@ public class BufferPool {
     public synchronized  void flushPages(TransactionId tid) throws IOException {
         // some code goes here
         // not necessary for lab1|lab2
+    	for (Map.Entry<PageId, Page> entry: cache.entrySet()) {
+    		if (entry.getValue().isDirty().equals(tid)) {
+    			flushPage(entry.getKey());
+    		}
+    	}
     }
 
     /**
@@ -228,4 +241,26 @@ public class BufferPool {
         // not necessary for lab1
     }
 
+}
+
+class LRUCache extends LinkedHashMap<PageId, Page>{
+    private int capacity;
+    
+    public LRUCache(int capacity) {
+        super(capacity, 0.75F, true); // accessOrder the ordering mode - true foraccess-order, false for insertion-order
+        this.capacity = capacity;
+    }
+
+    public Page get(PageId key) {
+        return super.getOrDefault(key, null);
+    }
+
+    public Page put(PageId key, Page value) {
+        return super.put(key, value);
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<PageId, Page> eldest) {
+        return size() > capacity; 
+    }
 }

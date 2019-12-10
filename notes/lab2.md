@@ -736,8 +736,9 @@ public interface Aggregator extends Serializable {
   }
   ```
   
+
 通过测试HeapFileWriteTest。
-  
+
 - src/simpledb/BufferPool.java
 
   ```java
@@ -862,4 +863,279 @@ public interface Aggregator extends Serializable {
 ### 2.5. Page eviction
 
 **Exercise 5.**
+
+- src/simpledb/BufferPool.java
+
+  ```java
+  class LRUCache extends LinkedHashMap<PageId, Page>{
+      private int capacity;
+      
+      public LRUCache(int capacity) {
+          super(capacity, 0.75F, true); // accessOrder the ordering mode - true foraccess-order, false for insertion-order
+          this.capacity = capacity;
+      }
+  
+      public Page get(PageId key) {
+          return super.getOrDefault(key, null);
+      }
+  
+      public Page put(PageId key, Page value) {
+          return super.put(key, value);
+      }
+  
+      @Override
+      protected boolean removeEldestEntry(Map.Entry<PageId, Page> eldest) {
+          return size() > capacity; 
+      }
+  }
+  
+  /**
+   * Flush all dirty pages to disk.
+   * NB: Be careful using this routine -- it writes dirty data to disk so will
+   *     break simpledb if running in NO STEAL mode.
+   */
+  public synchronized void flushAllPages() throws IOException {
+      // some code goes here
+      // not necessary for lab1
+  	for (Map.Entry<PageId, Page> entry: cache.entrySet()) {
+  		if (entry.getValue().isDirty() != null)
+  			flushPage(entry.getKey());
+  	}
+  }
+  
+  /** Remove the specific page id from the buffer pool.
+      Needed by the recovery manager to ensure that the
+      buffer pool doesn't keep a rolled back page in its
+      cache.
+      
+      Also used by B+ tree files to ensure that deleted pages
+      are removed from the cache so they can be reused safely
+  */
+  public synchronized void discardPage(PageId pid) {
+      // some code goes here
+      // not necessary for lab1
+  	cache.remove(pid);
+  }
+  
+  /**
+   * Flushes a certain page to disk
+   * @param pid an ID indicating the page to flush
+   */
+  private synchronized  void flushPage(PageId pid) throws IOException {
+      // some code goes here
+      // not necessary for lab1
+  	Database.getCatalog().getDatabaseFile(pid.getTableId()).writePage(cache.get(pid));
+  }
+  
+  /** Write all pages of the specified transaction to disk.
+   */
+  public synchronized  void flushPages(TransactionId tid) throws IOException {
+      // some code goes here
+      // not necessary for lab1|lab2
+  	for (Map.Entry<PageId, Page> entry: cache.entrySet()) {
+  		if (entry.getValue().isDirty().equals(tid)) {
+  			flushPage(entry.getKey());
+  		}
+  	}
+  }
+  
+  /**
+   * Discards a page from the buffer pool.
+   * Flushes the page to disk to ensure dirty pages are updated on disk.
+   */
+  private synchronized  void evictPage() throws DbException {
+      // some code goes here
+      // not necessary for lab1
+  }
+  ```
+
+  通过测试EvictionTest。
+
+  LRUCache的实现参考了[lru-cache](https://leetcode-cn.com/problems/lru-cache/solution/lru-huan-cun-ji-zhi-by-leetcode/)，另一份手动维护双向链表的实现如下：
+
+  ```java
+  import java.util.Hashtable;
+  public class LRUCache {
+  
+    class DLinkedNode {
+      int key;
+      int value;
+      DLinkedNode prev;
+      DLinkedNode next;
+    }
+  
+    private void addNode(DLinkedNode node) {
+      /**
+       * Always add the new node right after head.
+       */
+      node.prev = head;
+      node.next = head.next;
+  
+      head.next.prev = node;
+      head.next = node;
+    }
+  
+    private void removeNode(DLinkedNode node){
+      /**
+       * Remove an existing node from the linked list.
+       */
+      DLinkedNode prev = node.prev;
+      DLinkedNode next = node.next;
+  
+      prev.next = next;
+      next.prev = prev;
+    }
+  
+    private void moveToHead(DLinkedNode node){
+      /**
+       * Move certain node in between to the head.
+       */
+      removeNode(node);
+      addNode(node);
+    }
+  
+    private DLinkedNode popTail() {
+      /**
+       * Pop the current tail.
+       */
+      DLinkedNode res = tail.prev;
+      removeNode(res);
+      return res;
+    }
+  
+    private Hashtable<Integer, DLinkedNode> cache =
+            new Hashtable<Integer, DLinkedNode>();
+    private int size;
+    private int capacity;
+    private DLinkedNode head, tail;
+  
+    public LRUCache(int capacity) {
+      this.size = 0;
+      this.capacity = capacity;
+  
+      head = new DLinkedNode();
+      // head.prev = null;
+  
+      tail = new DLinkedNode();
+      // tail.next = null;
+  
+      head.next = tail;
+      tail.prev = head;
+    }
+  
+    public int get(int key) {
+      DLinkedNode node = cache.get(key);
+      if (node == null) return -1;
+  
+      // move the accessed node to the head;
+      moveToHead(node);
+  
+      return node.value;
+    }
+  
+    public void put(int key, int value) {
+      DLinkedNode node = cache.get(key);
+  
+      if(node == null) {
+        DLinkedNode newNode = new DLinkedNode();
+        newNode.key = key;
+        newNode.value = value;
+  
+        cache.put(key, newNode);
+        addNode(newNode);
+  
+        ++size;
+  
+        if(size > capacity) {
+          // pop the tail
+          DLinkedNode tail = popTail();
+          cache.remove(tail.key);
+          --size;
+        }
+      } else {
+        // update the value.
+        node.value = value;
+        moveToHead(node);
+      }
+    }
+  }
+  
+  /**
+   * LRUCache 对象会以如下语句构造和调用:
+   * LRUCache obj = new LRUCache(capacity);
+   * int param_1 = obj.get(key);
+   * obj.put(key,value);
+   */
+  ```
+
+### 2.6. Query walkthrough
+
+```sql
+SELECT * 
+  FROM some_data_file1, some_data_file2 
+  WHERE some_data_file1.field1 = some_data_file2.field1
+  AND some_data_file1.id > 1
+```
+
+实现该sql查询的程序如下，
+
+```java
+package simpledb;
+import java.io.*;
+
+public class jointest {
+
+    public static void main(String[] argv) {
+        // construct a 3-column table schema
+        Type types[] = new Type[]{ Type.INT_TYPE, Type.INT_TYPE, Type.INT_TYPE };
+        String names[] = new String[]{ "field0", "field1", "field2" };
+
+        TupleDesc td = new TupleDesc(types, names);
+
+        // create the tables, associate them with the data files
+        // and tell the catalog about the schema  the tables.
+        HeapFile table1 = new HeapFile(new File("some_data_file1.dat"), td);
+        Database.getCatalog().addTable(table1, "t1");
+
+        HeapFile table2 = new HeapFile(new File("some_data_file2.dat"), td);
+        Database.getCatalog().addTable(table2, "t2");
+
+        // construct the query: we use two SeqScans, which spoonfeed
+        // tuples via iterators into join
+        TransactionId tid = new TransactionId();
+
+        SeqScan ss1 = new SeqScan(tid, table1.getId(), "t1");
+        SeqScan ss2 = new SeqScan(tid, table2.getId(), "t2");
+
+        // create a filter for the where condition
+        Filter sf1 = new Filter(
+                                new Predicate(0,
+                                Predicate.Op.GREATER_THAN, new IntField(1)),  ss1);
+
+        JoinPredicate p = new JoinPredicate(1, Predicate.Op.EQUALS, 1);
+        Join j = new Join(p, sf1, ss2);
+
+        // and run it
+        try {
+            j.open();
+            while (j.hasNext()) {
+                Tuple tup = j.next();
+                System.out.println(tup);
+            }
+            j.close();
+            Database.getBufferPool().transactionComplete(tid);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+}
+```
+
+### 2.7. Query Parser
+
+相关源文件：SimpleDB.java, Parser.java。
+
+将build.xml中的字符编码改一下：`<?xml version="1.0" encoding="GBK"?> <!-- 这里从UTF-8改为GBK -->`。
 

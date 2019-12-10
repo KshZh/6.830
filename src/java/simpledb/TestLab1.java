@@ -12,7 +12,7 @@ public class TestLab1 {
 
         // create the table, associate it with some_data_file.dat
         // and tell the catalog about the schema of this table.
-        HeapFile table1 = new HeapFile(new File("lab1.dat"), descriptor); // 当前目录并不是该文件所在的目录，而是项目的根目录。
+        HeapFile table1 = new HeapFile(new File("./dat/lab1.dat"), descriptor); // 当前目录并不是该文件所在的目录，而是项目的根目录。
         Database.getCatalog().addTable(table1, "test");
 
         // construct the query: we use a simple SeqScan, which spoonfeeds

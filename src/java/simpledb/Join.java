@@ -2,8 +2,6 @@ package simpledb;
 
 import java.util.*;
 
-import com.sun.org.apache.xpath.internal.axes.ChildIterator;
-
 /**
  * The Join operator implements the relational join operation.
  */

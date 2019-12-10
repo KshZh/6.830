@@ -1,13 +1,9 @@
 package simpledb;
 
-import java.io.NotActiveException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Map.Entry;
-import java.util.PrimitiveIterator.OfDouble;
-
-import sun.font.GlyphLayout.GVData;
 
 /**
  * Knows how to compute some aggregate over a set of IntFields.

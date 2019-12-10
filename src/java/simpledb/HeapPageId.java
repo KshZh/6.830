@@ -1,7 +1,5 @@
 package simpledb;
 
-import org.hamcrest.core.IsInstanceOf;
-
 /** Unique identifier for HeapPage objects. */
 public class HeapPageId implements PageId {
 	int tableID; // 存放该Page所属的Table/DbFile。

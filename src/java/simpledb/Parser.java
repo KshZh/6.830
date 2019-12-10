@@ -534,7 +534,7 @@ public class Parser {
                     }
                     if (query != null)
                         query.execute();
-
+ 
                     if (!inUserTrans && curtrans != null) {
                         curtrans.commit();
                         System.out.println("Transaction "

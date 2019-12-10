@@ -2,8 +2,6 @@ package simpledb;
 
 import java.util.*;
 
-import com.sun.org.apache.bcel.internal.generic.NEWARRAY;
-
 /**
  * Filter is an operator that implements a relational select.
  */

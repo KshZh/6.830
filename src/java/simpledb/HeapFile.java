@@ -1,7 +1,5 @@
 package simpledb;
 
-import static org.junit.Assert.assertNotNull;
-
 import java.io.*;
 import java.util.*;
 

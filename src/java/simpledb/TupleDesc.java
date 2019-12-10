@@ -1,12 +1,7 @@
 package simpledb;
 
 import java.io.Serializable;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
-
-import javax.activation.FileDataSource;
-
-import org.hamcrest.core.IsInstanceOf;
 
 /**
  * TupleDesc describes the schema of a tuple.
